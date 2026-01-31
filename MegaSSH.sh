@@ -306,11 +306,15 @@ EOF
 echo -e "${YELLOW}[~] Validating Nginx Config...${NC}"
 nginx -t
 if [ $? -ne 0 ]; then
-    print_error "Nginx Config is Invalid!"
-    exit 1
-fi
+        if [ $? -ne 0 ]; then
+            print_error "Nginx Config is Invalid!"
+            exit 1
+        fi
 
 systemctl restart nginx > /dev/null 2>&1
+# Ensure the config is linked (Standard Ubuntu)
+ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+systemctl reload nginx
 # Verify Nginx
 check_service_health "nginx" "80"
 print_success "Nginx Decoy Live (Port 80 & Internal 8080)"
@@ -342,23 +346,15 @@ frontend stats
     stats uri /stats
     stats refresh 10s
 frontend multiplexer_443
-    bind *:${PORT_HAPROXY}
-    mode tcp
-    # 200ms Delay: Fast enough for browsers to send hello, short enough for silent SSH to feel instant
-    tcp-request inspect-delay 200ms
-    
     # Detect Obvious HTTP/TLS (Decoy Candidate)
-    # If it's TLS (not SSH), we send to decoy.
-    # Note: Decoy redirect will break if Nginx doesn't speak SSL on 8080.
-    # So for 443, we'll just reject non-SSH to avoid protocol errors, 
-    # OR we use a simple Nginx SSL listener.
-    # For now, let's just make it robust.
+    # If it looks like HTTP or TLS, send to Decoy. Else assume SSH.
+    acl is_http req.payload(0,3) -m str GET POST HEAD OPTIONS
+    acl is_tls req.ssl_hello_type gt 0
     
-    acl is_ssh req.payload(0,7) -m bin 5353482d322e30  # SSH-2.0
-    
-    # Routing Logic: If it's SSH, go to SSH. Else go to web_decoy.
-    use_backend ssh_backend if is_ssh
-    default_backend web_decoy_backend
+    # Routing Logic
+    use_backend web_decoy_backend if is_http
+    use_backend web_decoy_backend if is_tls
+    default_backend ssh_backend
 
 backend ssh_backend
     mode tcp

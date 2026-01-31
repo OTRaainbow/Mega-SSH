@@ -97,10 +97,11 @@ echo -e "\033[1;36m[+] Applying Smart Geo-Blocking (Allow SSH, Block Browsing)..
 # 1. Allow ESTABLISHED connections (Fixes SSH reply)
 iptables -A OUTPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
 
-# 2. Block VPN Clients from accessing Iran (Forwarding)
+# 2. Block VPN Clients from accessing Iran, Russia, China (Forwarding)
 iptables -A FORWARD -m set --match-set country_block_out dst -j DROP
+iptables -A FORWARD -m set --match-set country_block_out dst -j LOG --log-prefix "FIREWALL_BLOCK_OUT: "
 
-# 3. Block Server from initiating NEW connections to Iran (Leak Prevention)
+# 3. Block Server from initiating NEW connections to these countries
 iptables -A OUTPUT -m set --match-set country_block_out dst -m state --state NEW -j DROP
 
 # MSS Clamping (Packet Size Tuning - 1360)
