@@ -81,11 +81,16 @@ print_step "3/4" "Registering WARP Account..."
 warp-cli --accept-tos register > /dev/null 2>&1
 print_success "Account Registered"
 
-print_step "4/4" "Configuring Proxy Mode (Port 40000)..."
-warp-cli --accept-tos set-mode proxy > /dev/null 2>&1
-warp-cli --accept-tos set-proxy-port 40000 > /dev/null 2>&1
+print_step "4/4" "Configuring WARP Mode (Global Routing)..."
+warp-cli --accept-tos set-mode warp > /dev/null 2>&1
 warp-cli --accept-tos connect > /dev/null 2>&1
 sleep 5
+
+# Verification
+print_step "Verifying WARP Connection..."
+WARP_IP=$(curl -s --max-time 5 https://ifconfig.me)
+IS_WARP=$(curl -s --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep "warp=on")
+
 STATUS=$(warp-cli --accept-tos status | grep "Status")
 print_success "WARP Active: $STATUS"
 
@@ -93,6 +98,13 @@ echo ""
 echo -e "${BLUE}=================================================${NC}"
 echo -e "${GREEN}       WARP INTEGRATION COMPLETE                 ${NC}"
 echo -e "${BLUE}=================================================${NC}"
-echo -e "  • ${CYAN}SOCKS5 Proxy:${NC}  127.0.0.1:40000"
-echo -e "  • ${CYAN}Usage:${NC} Configure outbound tools to use this proxy."
+if [ -n "$IS_WARP" ]; then
+    echo -e "  • ${GREEN}WARP Status:${NC}   ACTIVE (System-wide)"
+    echo -e "  • ${CYAN}Public IP:${NC}     $WARP_IP (Protected)"
+else
+    echo -e "  • ${RED}WARP Status:${NC}   CONNECTED BUT NOT VERIFIED"
+    echo -e "  • ${YELLOW}Note:${NC}          Please check 'warp-cli status' manually."
+fi
+echo -e "  • ${CYAN}Usage:${NC}       All server traffic is now routed through Cloudflare."
 echo ""
+
