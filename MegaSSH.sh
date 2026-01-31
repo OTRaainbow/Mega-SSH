@@ -385,10 +385,17 @@ print_success "TLS Wrappers Active (Stunnel + ShadowTLS)"
 
 # 8. Firewall & Geofencing
 print_step "8/10" "Applying Advanced Firewall & Geofencing..."
-# Fetching IP Lists from your GitHub automatically
-fetch_script "ip2location_country_ir.netset"
-fetch_script "ip2location_country_ru.netset"
-fetch_script "ip2location_country_cn.netset"
+# Fetching High-Quality FireHOL Blocklists
+download_firehol() {
+    local cc=$1
+    local url="https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/ip2location_country_${cc}.netset"
+    echo -e "${YELLOW}[~] Downloading FireHOL $cc List...${NC}"
+    wget -q -O "ip2location_country_${cc}.netset" "$url"
+}
+download_firehol "ir"
+download_firehol "ru"
+download_firehol "cn"
+
 fetch_script "firewall_manager.sh"
 ./firewall_manager.sh
 print_success "Firewall Rules Applied (Zero-Leak Mode Active)"
