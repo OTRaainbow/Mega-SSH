@@ -306,10 +306,9 @@ EOF
 echo -e "${YELLOW}[~] Validating Nginx Config...${NC}"
 nginx -t
 if [ $? -ne 0 ]; then
-        if [ $? -ne 0 ]; then
-            print_error "Nginx Config is Invalid!"
-            exit 1
-        fi
+    print_error "Nginx Config is Invalid!"
+    exit 1
+fi
 
 systemctl restart nginx > /dev/null 2>&1
 # Ensure the config is linked (Standard Ubuntu)
@@ -346,6 +345,11 @@ frontend stats
     stats uri /stats
     stats refresh 10s
 frontend multiplexer_443
+    bind *:${PORT_HAPROXY}
+    mode tcp
+    # 200ms Delay: Fast enough for browsers to send hello, short enough for silent SSH to feel instant
+    tcp-request inspect-delay 200ms
+    
     # Detect Obvious HTTP/TLS (Decoy Candidate)
     # If it looks like HTTP or TLS, send to Decoy. Else assume SSH.
     acl is_http req.payload(0,3) -m str GET POST HEAD OPTIONS

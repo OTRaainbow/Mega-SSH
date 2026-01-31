@@ -8,44 +8,44 @@
 
 echo -e "\033[1;36m[+] Initializing Firewall Manager...\033[0m"
 
+# Define colors for output
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
 # Install Dependencies
 apt update
 apt install -y ipset iptables-persistent ufw curl
 
-# 1. Initialize IPSet Lists
-echo -e "\033[1;33m[~] Creating IPSet Lists (High Performance)...\033[0m"
-ipset create country_block_in hash:net -exist
-ipset create country_block_out hash:net -exist
-ipset flush country_block_in
-ipset flush country_block_out
+# 2. Populate IP Sets from Local CIDR Files
+echo -e "\033[1;33m[~] Populating IP Sets from Local Files...\033[0m"
 
-# 2. Download IP Lists (Updated for Geo-Whitelisting)
-echo -e "\033[1;33m[~] Downloading IP Lists (Iran Whitelist)...\033[0m"
-# Check/Create Set for Iran
-ipset -L country_allow_in >/dev/null 2>&1 || ipset create country_allow_in hash:net
-# Download Iran IPs
-wget -O ir.zone http://www.ipdeny.com/ipblocks/data/countries/ir.zone > /dev/null 2>&1
-# Add IPs to Set
-while read line; do ipset -A country_allow_in $line; done < ir.zone
-rm ir.zone
-
-# Check/Create Set for Outbound Block (Blocking VPN browsing to IR, RU, CN)
+# Create Iran Set (For Outbound Block)
 ipset -L country_block_out >/dev/null 2>&1 || ipset create country_block_out hash:net
-for cc in ir ru cn; do
-    wget -O $cc.zone http://www.ipdeny.com/ipblocks/data/countries/$cc.zone > /dev/null 2>&1
-    while read line; do ipset -A country_block_out $line; done < $cc.zone
-    rm $cc.zone
-done
+ipset flush country_block_out # Clear existing entries for fresh load
+if [ -f ir.cidr ]; then
+    while read line; do ipset -A country_block_out $line; done < ir.cidr
+    echo -e "${GREEN}[✔] Loaded Iran CIDRs (Outbound Block)${NC}"
+else
+    echo -e "${RED}[✘] Error: ir.cidr not found!${NC}"
+fi
 
-# Check/Create Set for Inbound Block (Blocking SSH/Attackers from RU, CN)
+# Create Russia/China Sets (For Inbound & Outbound Block)
 ipset -L country_block_in >/dev/null 2>&1 || ipset create country_block_in hash:net
+ipset flush country_block_in # Clear existing entries for fresh load
 for cc in ru cn; do
-    wget -O $cc.zone http://www.ipdeny.com/ipblocks/data/countries/$cc.zone > /dev/null 2>&1
-    while read line; do ipset -A country_block_in $line; done < $cc.zone
-    rm $cc.zone
+    if [ -f $cc.cidr ]; then
+        while read line; do
+            ipset -A country_block_in $line
+            ipset -A country_block_out $line # Also block outbound to these countries
+        done < $cc.cidr
+        echo -e "${GREEN}[✔] Loaded $cc.cidr (Inbound/Outbound Block)${NC}"
+    else
+        echo -e "${RED}[✘] Error: $cc.cidr not found!${NC}"
+    fi
 done
 
-echo -e "\033[1;32m[+] IP Lists Populated (Blocked: IR/RU/CN Outbound, RU/CN Inbound).\033[0m"
+echo -e "\033[1;32m[+] IP Lists Populated (Blocked: RU/CN Inbound/Outbound, IR Outbound).\033[0m"
 
 # 3. Apply IPTable Rules
 echo -e "\033[1;33m[~] Applying Whitelist Rules (Paranoid Mode)...\033[0m"
