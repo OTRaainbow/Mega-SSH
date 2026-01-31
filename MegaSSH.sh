@@ -488,6 +488,13 @@ run_integrated_audit() {
     printf "%-30s" "[~] IPSet (RU/CN Block)..."
     if [ -n "$RU_CN_COUNT" ] && [ "$RU_CN_COUNT" -gt 0 ]; then echo -e "${GREEN}[OK] ($RU_CN_COUNT entries)${NC}"; else echo -e "${RED}[EMPTY]${NC}"; fi
     
+    # Check Policy Routing (FWMark)
+    printf "%-30s" "[~] Zero-Leak Routing Rule..."
+    if ip rule show | grep -q "0x99"; then echo -e "${GREEN}[ACTIVE]${NC}"; else echo -e "${RED}[MISSING]${NC}"; fi
+
+    printf "%-30s" "[~] Blackhole Table 100..."
+    if ip route show table 100 | grep -q "unreachable default"; then echo -e "${GREEN}[OK]${NC}"; else echo -e "${RED}[MISSING]${NC}"; fi
+
     # Check IPv6
     printf "%-30s" "[~] IPv6 Status..."
     IPV6_STATUS=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)
