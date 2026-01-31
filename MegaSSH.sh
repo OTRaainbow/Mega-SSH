@@ -415,7 +415,8 @@ systemctl restart cron
 print_success "Cron Jobs Scheduled"
 
 # Prepare Audit Tool
-fetch_script "mega-audit.sh" >> /dev/null 2>&1
+echo -e "${YELLOW}[~] Setting up Audit Tool...${NC}"
+fetch_script "mega-audit.sh" || echo -e "${RED}[!] Note: mega-audit.sh not found on GitHub. Please upload it to your repo.${NC}"
 
 # --- Final Summary ---
 echo ""
@@ -435,3 +436,18 @@ echo -e "  • Add WARP:      ${GREEN}./MegaSSH-WARP.sh${NC}"
 echo -e "  • ${RED}Run Audit:${NC}     ${GREEN}./mega-audit.sh${NC}"
 echo -e "${BLUE}=================================================${NC}"
 echo ""
+
+# --- Auto-Audit & Final Prompt ---
+if [ -f "mega-audit.sh" ]; then
+    echo -e "${YELLOW}[~] Starting Final System Validation...${NC}"
+    chmod +x mega-audit.sh
+    ./mega-audit.sh
+else
+    echo -e "${RED}[!] Note: mega-audit.sh is missing. Skipping auto-check.${NC}"
+    echo -e "\n${RED}[!] IMPORTANT: System changes require a reboot to be 100% effective.${NC}"
+    read -p "Would you like to REBOOT the server now? (y/n): " confirm
+    if [[ "$confirm" == [yY] ]]; then
+        echo -e "${GREEN}[+] Rebooting...${NC}"
+        reboot
+    fi
+fi
