@@ -79,6 +79,15 @@ REPO_BASE="https://raw.githubusercontent.com/ChangeMe/MegaSSH/main"
 fetch_script() {
     local script_name=$1
     if [ ! -f "$script_name" ]; then
+        # Check if URL is configured
+        if [[ "$REPO_BASE" == *"ChangeMe"* ]]; then
+            echo -e "${RED}[!] Error: REPO_BASE is not configured!${NC}"
+            echo -e "${YELLOW}    1. Open MegaSSH.sh${NC}"
+            echo -e "${YELLOW}    2. Change 'ChangeMe/MegaSSH' to your GitHub User/Repo${NC}"
+            echo -e "${YELLOW}    3. OR place '$script_name' in this directory manually.${NC}"
+            exit 1
+        fi
+
         echo -e "${YELLOW}[~] Fetching $script_name from GitHub...${NC}"
         wget -q -O "$script_name" "${REPO_BASE}/${script_name}"
         if [ $? -ne 0 ]; then

@@ -55,6 +55,10 @@ fi
 echo -e "\033[1;33m[~] Running MegaSSH.sh (Core Installer)...\033[0m"
 chmod +x MegaSSH.sh
 ./MegaSSH.sh
+if [ $? -ne 0 ]; then
+    print_error "MegaSSH.sh execution failed! Aborting."
+    exit 1
+fi
 
 # Re-print banner after MegaSSH clears screen
 print_banner
