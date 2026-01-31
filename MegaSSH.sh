@@ -27,7 +27,7 @@ print_banner() {
     echo "         High-Security VPN Installer             "
     echo -e "${NC}"
     echo -e "${BLUE}=================================================${NC}"
-    echo -e "${YELLOW}  Target OS: Ubuntu 24.04 | Version: 3.0.4 (Ultra-Sync)${NC}"
+    echo -e "${YELLOW}  Target OS: Ubuntu 24.04 | Version: 4.0 (Nuclear Enforcement)${NC}"
     echo -e "${BLUE}=================================================${NC}"
     echo ""
 }
@@ -398,7 +398,7 @@ download_user_list "cn"
 
 fetch_script "firewall_manager.sh"
 ./firewall_manager.sh
-print_success "Firewall Rules Applied (Zero-Leak V3 Active)"
+print_success "Nuclear Firewall Active (Priority 5 In-Place)"
 
 # 9. Session Limiter (Global Compatibility)
 print_step "9/10" "Enforcing Session Limits (Compatible with useradd.py)..."
@@ -501,11 +501,16 @@ run_integrated_audit() {
     if [ -n "$RU_CN_COUNT" ] && [ "$RU_CN_COUNT" -gt 0 ]; then echo -e "${GREEN}[OK] ($RU_CN_COUNT entries)${NC}"; else echo -e "${RED}[EMPTY]${NC}"; fi
     
     # Check Policy Routing (FWMark 0x99 -> Table 200)
-    printf "%-30s" "[~] Zero-Leak Routing (Rule 0x99)..."
-    if ip rule show | grep -q "0x99"; then echo -e "${GREEN}[ACTIVE]${NC}"; else echo -e "${RED}[MISSING]${NC}"; fi
+    printf "%-30s" "[~] Nuclear Routing (Rule Pri 5)..."
+    if ip rule show | grep -q "priority 5.*from all fwmark 0x99 lookup 200"; then 
+        echo -e "${GREEN}[ACTIVE]${NC}"
+    else 
+        echo -e "${RED}[BYPASS RISK]${NC}"
+        echo -e "    ${YELLOW}(Rule priority is not 5 - Tunnel might bypass)${NC}"
+    fi
 
     printf "%-30s" "[~] Blackhole Table 200..."
-    if ip route show table 200 2>/dev/null | grep -q "blackhole"; then echo -e "${GREEN}[OK]${NC}"; else echo -e "${RED}[MISSING]${NC}"; fi
+    if ip route show table 200 2>/dev/null | grep -qE "blackhole|unreachable"; then echo -e "${GREEN}[OK]${NC}"; else echo -e "${RED}[MISSING]${NC}"; fi
 
     # Check IPv6
     printf "%-30s" "[~] IPv6 Status..."
