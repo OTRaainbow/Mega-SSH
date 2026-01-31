@@ -108,6 +108,26 @@ print_success "Account Registered"
 
 print_step "4/4" "Configuring WARP Mode (Global Routing)..."
 warp-cli --accept-tos mode warp
+
+# -------------------------------------------------------------
+# ANTI-LOCKOUT: Exclude IPs to preserve SSH access
+# -------------------------------------------------------------
+print_step "Applying Anti-Lockout Rules..."
+
+# 1. Detect Server Public IP (Fixes return path routing)
+SERVER_IP=$(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v "127.0.0.1" | head -n 1)
+if [ -n "$SERVER_IP" ]; then
+    echo -e "${YELLOW}[+] Excluding Server IP: ${SERVER_IP}${NC}"
+    warp-cli --accept-tos tunnel ip add "$SERVER_IP" > /dev/null 2>&1
+fi
+
+# 2. Detect Current SSH Client IP (Backup access)
+CLIENT_IP=$(echo $SSH_CLIENT | awk '{print $1}')
+if [ -n "$CLIENT_IP" ]; then
+    echo -e "${YELLOW}[+] Excluding Your IP:   ${CLIENT_IP}${NC}"
+    warp-cli --accept-tos tunnel ip add "$CLIENT_IP" > /dev/null 2>&1
+fi
+
 echo -e "${YELLOW}[~] Connecting to WARP (This may take a moment)...${NC}"
 warp-cli --accept-tos connect
 
