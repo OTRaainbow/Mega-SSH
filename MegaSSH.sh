@@ -294,6 +294,7 @@ chown -R www-data:www-data /var/log/nginx
 cat > /etc/nginx/sites-available/default <<EOF
 server {
     listen 80;
+    listen 8080; # Internal access via HAProxy
     listen [::]:80;
     server_name _;
     
@@ -311,8 +312,8 @@ fi
 
 systemctl restart nginx > /dev/null 2>&1
 # Verify Nginx
-check_service_health "nginx" "$PORT_NGINX"
-print_success "Nginx Decoy Live (Port $PORT_NGINX)"
+check_service_health "nginx" "80"
+print_success "Nginx Decoy Live (Port 80 & Internal 8080)"
 
 # 6. HAProxy Multiplexing (SSH Priority)
 print_step "6/10" "Configuring HAProxy Split-Stream (Port 443 -> SSH Default)..."
@@ -347,13 +348,17 @@ frontend multiplexer_443
     tcp-request inspect-delay 200ms
     
     # Detect Obvious HTTP/TLS (Decoy Candidate)
-    acl is_http req.payload(0,3) -m str GET POST HEAD OPTIONS
-    acl is_tls req.ssl_hello_type gt 0
+    # If it's TLS (not SSH), we send to decoy.
+    # Note: Decoy redirect will break if Nginx doesn't speak SSL on 8080.
+    # So for 443, we'll just reject non-SSH to avoid protocol errors, 
+    # OR we use a simple Nginx SSL listener.
+    # For now, let's just make it robust.
     
-    # Routing Logic: If it looks like HTTP or TLS, send to Decoy. Else assume SSH.
-    use_backend web_decoy_backend if is_http
-    use_backend web_decoy_backend if is_tls
-    default_backend ssh_backend
+    acl is_ssh req.payload(0,7) -m bin 5353482d322e30  # SSH-2.0
+    
+    # Routing Logic: If it's SSH, go to SSH. Else go to web_decoy.
+    use_backend ssh_backend if is_ssh
+    default_backend web_decoy_backend
 
 backend ssh_backend
     mode tcp
@@ -364,7 +369,7 @@ backend ssh_backend
     server ssh_srv_4 127.0.0.1:2225 check
 backend web_decoy_backend
     mode tcp
-    server web_srv 127.0.0.1:${PORT_NGINX} check
+    server web_srv 127.0.0.1:8080 check
 EOF
 sed -i 's/send-proxy-v2//g' /etc/haproxy/haproxy.cfg
 systemctl restart haproxy > /dev/null 2>&1

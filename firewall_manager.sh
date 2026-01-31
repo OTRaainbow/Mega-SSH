@@ -29,13 +29,23 @@ wget -O ir.zone http://www.ipdeny.com/ipblocks/data/countries/ir.zone > /dev/nul
 while read line; do ipset -A country_allow_in $line; done < ir.zone
 rm ir.zone
 
-# Check/Create Set for Outbound Block (Still block outbound logic if needed, but user didn't specify removing it)
+# Check/Create Set for Outbound Block (Blocking VPN browsing to IR, RU, CN)
 ipset -L country_block_out >/dev/null 2>&1 || ipset create country_block_out hash:net
-wget -O ir.zone http://www.ipdeny.com/ipblocks/data/countries/ir.zone > /dev/null 2>&1
-while read line; do ipset -A country_block_out $line; done < ir.zone
-rm ir.zone
+for cc in ir ru cn; do
+    wget -O $cc.zone http://www.ipdeny.com/ipblocks/data/countries/$cc.zone > /dev/null 2>&1
+    while read line; do ipset -A country_block_out $line; done < $cc.zone
+    rm $cc.zone
+done
 
-echo -e "\033[1;32m[+] IP Lists Populated.\033[0m"
+# Check/Create Set for Inbound Block (Blocking SSH/Attackers from RU, CN)
+ipset -L country_block_in >/dev/null 2>&1 || ipset create country_block_in hash:net
+for cc in ru cn; do
+    wget -O $cc.zone http://www.ipdeny.com/ipblocks/data/countries/$cc.zone > /dev/null 2>&1
+    while read line; do ipset -A country_block_in $line; done < $cc.zone
+    rm $cc.zone
+done
+
+echo -e "\033[1;32m[+] IP Lists Populated (Blocked: IR/RU/CN Outbound, RU/CN Inbound).\033[0m"
 
 # 3. Apply IPTable Rules
 echo -e "\033[1;33m[~] Applying Whitelist Rules (Paranoid Mode)...\033[0m"
@@ -67,9 +77,10 @@ iptables -t raw -A PREROUTING -m state --state RELATED,ESTABLISHED -j ACCEPT
 # SAFETY CHECK: Only apply DROP if the Whitelist is populated
 if ipset list country_allow_in | grep -q "Number of entries: [1-9]"; then
     echo -e "\033[1;32m[+] Geo-Whitelist populated.\033[0m"
-    echo -e "\033[1;31m[!] WARNING: Paranoid Mode (Drop Non-Iran) is DISABLED by default to prevent lockout.\033[0m"
-    echo -e "\033[1;33m    Uncomment the DROP line in firewall_manager.sh to enable it.\033[0m"
-    # Drop if NOT in Iran IP Set (Ingress) - DISABLED BY DEFAULT
+    echo -e "\033[1;31m[!] Dropping Inbound connections from Blocked Countries (RU/CN)... \033[0m"
+    # Drop if in the Block In Set (Ingress)
+    iptables -t raw -A PREROUTING -m set --match-set country_block_in src -j DROP
+    # Drop if NOT in Iran IP Set (Ingress) - DISABLED BY DEFAULT (Risk of lockout if user not in IR)
     # iptables -t raw -A PREROUTING -m set ! --match-set country_allow_in src -j DROP
 else
     echo -e "\033[1;31m[!] WARNING: Geo-Whitelist is EMPTY. Skipping Drop Rule to prevent Lockout.\033[0m"
