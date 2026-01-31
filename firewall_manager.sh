@@ -90,6 +90,15 @@ iptables -I FORWARD 1 -m set --match-set country_block_out dst -j DROP
 # [C] Block Outbound IR/RU/CN (LOCAL - Server Apps)
 iptables -I OUTPUT 1 -m set --match-set country_block_out dst -m state --state NEW -j DROP
 
+# [D] DNS Hardening (Anti-Bypass)
+# Force all DNS traffic into the block list check
+iptables -I FORWARD 1 -p udp --dport 53 -m set --match-set country_block_out dst -j DROP
+iptables -I FORWARD 1 -p tcp --dport 53 -m set --match-set country_block_out dst -j DROP
+iptables -I OUTPUT 1 -p udp --dport 53 -m set --match-set country_block_out dst -j DROP
+
+# [E] MSS Clamping for Stealth
+iptables -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1360
+
 # 5. UFW Integration (Allow our ports)
 ufw --force reset
 ufw default deny incoming

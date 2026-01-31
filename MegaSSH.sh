@@ -414,6 +414,9 @@ chmod 644 /etc/cron.d/megassh_maintenance
 systemctl restart cron
 print_success "Cron Jobs Scheduled"
 
+# Prepare Audit Tool
+fetch_script "mega-audit.sh" >> /dev/null 2>&1
+
 # --- Final Summary ---
 echo ""
 echo -e "${BLUE}=================================================${NC}"
@@ -429,5 +432,6 @@ echo -e ""
 echo -e "${YELLOW}Management Commands:${NC}"
 echo -e "  • Add Users:     ${GREEN}Use useradd.py GUI${NC}"
 echo -e "  • Add WARP:      ${GREEN}./MegaSSH-WARP.sh${NC}"
+echo -e "  • ${RED}Run Audit:${NC}     ${GREEN}./mega-audit.sh${NC}"
 echo -e "${BLUE}=================================================${NC}"
 echo ""
