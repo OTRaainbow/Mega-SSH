@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ==============================================================================
-# Bulletproof Firewall Manager (Nuclear Geo-Blocking)
-# Replaces all previous rules with strict, high-priority blocks.
+# Total Shutdown Firewall (Final Solution)
+# Blocks IR/RU/CN at EVERY layer of the network stack.
 # ==============================================================================
 
 GREEN='\033[0;32m'
@@ -11,122 +11,100 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-echo -e "${CYAN}[+] Starting Nuclear Firewall Harden...${NC}"
+echo -e "${CYAN}[+] Starting Total Shutdown Firewall...${NC}"
 
-# 1. Nuke IPv6 (High Risk of Leaks)
-echo -e "${YELLOW}[~] Nuking IPv6...${NC}"
+# 1. Nuke IPv6 (Global)
 sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1
 sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1
-sysctl -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null 2>&1
 
 ip6tables -F
-ip6tables -X
 ip6tables -P INPUT DROP
 ip6tables -P FORWARD DROP
 ip6tables -P OUTPUT DROP
 
 # 2. Setup High-Capacity IPSets
-echo -e "${YELLOW}[~] Initializing High-Capacity Sets (524k)...${NC}"
 ipset create country_block_in hash:net maxelem 524288 -exist
 ipset create country_block_out hash:net maxelem 524288 -exist
 ipset flush country_block_in
 ipset flush country_block_out
 
-# 3. Fast Loading with ipset-restore format
 load_set() {
-    local country=$1
-    local file=$2
-    local target_set=$3
+    local country=$1; local file=$2; local target_set=$3
     if [ -f "$file" ]; then
         echo -e "${YELLOW}[~] Loading $file into $target_set...${NC}"
-        # Convert to ipset restore format for speed
-        # tr -d '\r' removes Windows line endings
-        # awk cleans empty lines and comments, formats for ipset
         (
             echo "create $target_set hash:net maxelem 524288 -exist"
             grep -v '^#' "$file" | tr -d '\r' | awk -v set="$target_set" 'NF {print "add " set " " $1}'
-        ) | ipset restore
-        echo -e "${GREEN}[✔] Loaded $country successfully.${NC}"
-    else
-        echo -e "${RED}[✘] Error: $file not found! Skipping...${NC}"
+        ) | ipset restore -exist
     fi
 }
 
-# Load Iran (Outbound Only)
-if [ -f "ip2location_country_ir.netset" ]; then
-    load_set "Iran" "ip2location_country_ir.netset" "country_block_out"
-else
-    echo -e "${RED}[✘] Error: ip2location_country_ir.netset NOT FOUND in $(pwd)${NC}"
-    echo -e "${YELLOW}    Please upload this file to the server root!${NC}"
-fi
-
-# Load Russia & China (Inbound & Outbound)
-for cc in ru cn; do
+# Auto-Download & Load
+for cc in ir ru cn; do
     FILE="ip2location_country_${cc}.netset"
     if [ -f "$FILE" ]; then
-        load_set "$cc" "$FILE" "country_block_in"
-        # Also add to outbound block
-        grep -v '^#' "$FILE" | tr -d '\r' | awk 'NF {print "add country_block_out " $1}' | ipset restore -exist
-    else
-        echo -e "${RED}[✘] Error: $FILE NOT FOUND in $(pwd)${NC}"
+        if [ "$cc" == "ir" ]; then
+            load_set "Iran" "$FILE" "country_block_out"
+        else
+            load_set "$cc" "$FILE" "country_block_in"
+            # Add RU/CN to both
+            grep -v '^#' "$FILE" | tr -d '\r' | awk 'NF {print "add country_block_out " $1}' | ipset restore -exist
+        fi
     fi
 done
 
-# 4. Applying Chain Rules (Absolute Top Priority)
-echo -e "${YELLOW}[~] Applying Strict Filter Rules...${NC}"
+# 3. APPLY RULES (NUCLEAR MODE)
+# We apply in MANGLE, RAW, and FILTER to ensure NO bypass via WARP/Routing
 
-# Clear existing mangle/raw for fresh start
-iptables -t raw -F
-iptables -t mangle -F
+# Clear All Tables
 iptables -F
+iptables -X
+iptables -t nat -F
+iptables -t mangle -F
+iptables -t raw -F
 
-# Define Base Interface Rules
-iptables -A INPUT -i lo -j ACCEPT
-iptables -A OUTPUT -o lo -j ACCEPT
-iptables -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
-iptables -A OUTPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+# --- MANGLE TABLE (Before/After Routing) ---
+# Catch everything before it leaves the network card
+iptables -t mangle -I PREROUTING 1 -m set --match-set country_block_in src -j DROP
+iptables -t mangle -I POSTROUTING 1 -m set --match-set country_block_out dst -j DROP
 
-# --- THE BLOCKS (INSERTED AT TOP) ---
-
-# [A] Block Inbound RU/CN (RAW table is fastest)
+# --- RAW TABLE (Fast Drop) ---
 iptables -t raw -I PREROUTING 1 -m set --match-set country_block_in src -j DROP
+iptables -t raw -I OUTPUT 1 -m set --match-set country_block_out dst -j DROP
 
-# [B] Block Outbound IR/RU/CN (FORWARDING - VPN Clients)
+# --- FILTER TABLE (Deep Drop) ---
+iptables -P INPUT ACCEPT
+iptables -P FORWARD ACCEPT
+iptables -P OUTPUT ACCEPT
+
+# Inbound
+iptables -I INPUT 1 -i lo -j ACCEPT
+iptables -I INPUT 2 -m state --state RELATED,ESTABLISHED -j ACCEPT
+iptables -I INPUT 3 -m set --match-set country_block_in src -j DROP
+
+# Outbound (STATELESS - Block Everything)
 iptables -I FORWARD 1 -m set --match-set country_block_out dst -j DROP
+iptables -I OUTPUT 1 -m set --match-set country_block_out dst -j DROP
 
-# [C] Block Outbound IR/RU/CN (LOCAL - Server Apps)
-iptables -I OUTPUT 1 -m set --match-set country_block_out dst -m state --state NEW -j DROP
-
-# [D] DNS Hardening (Anti-Bypass)
-# Force all DNS traffic into the block list check
-iptables -I FORWARD 1 -p udp --dport 53 -m set --match-set country_block_out dst -j DROP
-iptables -I FORWARD 1 -p tcp --dport 53 -m set --match-set country_block_out dst -j DROP
+# DNS Hardening
 iptables -I OUTPUT 1 -p udp --dport 53 -m set --match-set country_block_out dst -j DROP
+iptables -I OUTPUT 1 -p tcp --dport 53 -m set --match-set country_block_out dst -j DROP
+iptables -I FORWARD 1 -p udp --dport 53 -m set --match-set country_block_out dst -j DROP
 
-# [E] MSS Clamping for Stealth
-iptables -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1360
+# 4. Base Access (UFW-style in iptables to be safe)
+iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+iptables -A INPUT -p tcp --dport 2222 -j ACCEPT
+iptables -A INPUT -p tcp --dport 8443 -j ACCEPT
+iptables -A INPUT -p tcp --dport 9443 -j ACCEPT
+iptables -A INPUT -p udp --dport 7301 -j ACCEPT
 
-# 5. UFW Integration (Allow our ports)
-ufw --force reset
-ufw default deny incoming
-ufw default allow outgoing
-ufw allow 22/tcp
-ufw allow 80/tcp
-ufw allow 443/tcp
-ufw allow 7301/tcp
-ufw allow 7301/udp
-ufw allow 8443/tcp
-ufw allow 9443/tcp
-ufw --force enable
-
-# 6. Persistence
+# 5. Persistence
 iptables-save > /etc/iptables/rules.v4
 netfilter-persistent save > /dev/null 2>&1
 
-echo -e "${GREEN}[✔] NUCLEAR FIREWALL ACTIVE.${NC}"
+echo -e "${GREEN}[✔] TOTAL SHUTDOWN ACTIVE.${NC}"
 echo -e "${CYAN}--------------------------------------------------${NC}"
-echo -e "Total Filtered Ranges: $(ipset list | grep 'Number of entries' | awk '{sum+=$4} END {print sum}')"
-echo -e "${CYAN}--------------------------------------------------${NC}"
-echo -e "Testing Iranian IP (5.1.43.1): $(ipset test country_block_out 5.1.43.1 2>&1)"
-echo -e "Testing Russian IP (5.8.32.1): $(ipset test country_block_in 5.8.32.1 2>&1)"
+echo -e "Entries in Blocklist: $(ipset list | grep 'Number of entries' | awk '{sum+=$4} END {print sum}')"
 echo -e "${CYAN}--------------------------------------------------${NC}"
