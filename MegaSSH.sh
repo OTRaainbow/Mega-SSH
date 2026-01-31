@@ -152,10 +152,11 @@ systemctl mask ssh.socket
 
 cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
 # Settings
-# Remove existing ports and add split-stream ports (0.0.0.0 for Direct Access)
+# Remove existing ports and add split-stream ports (LOCALHOST ONLY)
 sed -i "/^Port/d" /etc/ssh/sshd_config
 sed -i "/^ListenAddress/d" /etc/ssh/sshd_config
-# Note: No ListenAddress = 0.0.0.0 (Open to World)
+# Bind ONLY to Localhost (Security: User wants ONLY 443 accessible)
+echo "ListenAddress 127.0.0.1" >> /etc/ssh/sshd_config
 echo "Port 2222" >> /etc/ssh/sshd_config
 echo "Port 2223" >> /etc/ssh/sshd_config
 echo "Port 2224" >> /etc/ssh/sshd_config
@@ -279,7 +280,9 @@ frontend stats
 frontend multiplexer_443
     bind *:${PORT_HAPROXY}
     mode tcp
-    tcp-request inspect-delay 5s
+    # 200ms Delay: Fast enough for browsers to send hello, short enough for silent SSH to feel instant
+    tcp-request inspect-delay 200ms
+    
     # Detect Obvious HTTP/TLS (Decoy Candidate)
     acl is_http req.payload(0,3) -m str GET POST HEAD OPTIONS
     acl is_tls req.ssl_hello_type gt 0

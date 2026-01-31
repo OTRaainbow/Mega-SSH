@@ -50,7 +50,7 @@ ufw allow ${PORT_UDPGW}/tcp    # 7301
 ufw allow ${PORT_UDPGW}/udp    # 7301
 ufw allow 8443/tcp             # Stunnel (SSL SSH)
 ufw allow 9443/tcp             # ShadowTLS (Advanced)
-ufw allow 2222:2225/tcp        # Split-Stream SSH (Direct Access)
+# ufw allow 2222:2225/tcp    # (Disabled: Only Port 443 External)
 
 # --- GEO-LOCKING (IRAN ONLY) ---
 # Strategy: Drop everything NOT from Iran (Whitelist)
