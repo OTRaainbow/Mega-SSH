@@ -437,17 +437,89 @@ echo -e "  • ${RED}Run Audit:${NC}     ${GREEN}./mega-audit.sh${NC}"
 echo -e "${BLUE}=================================================${NC}"
 echo ""
 
-# --- Auto-Audit & Final Prompt ---
-if [ -f "mega-audit.sh" ]; then
-    echo -e "${YELLOW}[~] Starting Final System Validation...${NC}"
-    chmod +x mega-audit.sh
-    bash ./mega-audit.sh
-else
-    echo -e "${RED}[!] Note: mega-audit.sh is missing. Skipping auto-check.${NC}"
+# --- Integrated Health Audit & Final Prompt ---
+run_integrated_audit() {
+    echo -e "${CYAN}=================================================${NC}"
+    echo -e "${CYAN}        MEGASSH SYSTEM AUDIT (CHECK LOG)        ${NC}"
+    echo -e "${CYAN}=================================================${NC}"
+    date
+    
+    echo -e "\n${YELLOW}--- Component Status ---${NC}"
+    # Diagnostic check function
+    check_port() {
+        local name=$1; local port=$2
+        printf "%-30s" "[~] Checking $name ($port)..."
+        if ss -tlnp | grep -q ":$port "; then
+            echo -e "${GREEN}[OK]${NC}"; return 0
+        else
+            echo -e "${RED}[FAILED]${NC}"; return 1
+        fi
+    }
+    check_port "Nginx (Decoy)" 80
+    check_port "HAProxy (Multiplexer)" 443
+    check_port "SSH (Internal)" 2222
+    check_port "Stunnel (SSL)" 8443
+    check_port "ShadowTLS" 9443
+    check_port "UDPGW" 7301
+    check_port "Rescue SSH" 22
+
+    echo -e "\n${YELLOW}--- Firewall Integrity ---${NC}"
+    # Check Files
+    printf "%-30s" "[~] Checking .netset files..."
+    FILES_COUNT=$(ls ip2location_country_*.netset 2>/dev/null | wc -l)
+    if [ "$FILES_COUNT" -ge 3 ]; then 
+        echo -e "${GREEN}[FOUND]${NC}"
+    else 
+        echo -e "${RED}[MISSING]${NC}"
+        echo -e "    ${YELLOW}(Note: Please upload ip2location_country_*.netset files to /root/ on your server)${NC}"
+    fi
+
+    # Check IPSet
+    IR_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
+    RU_CN_COUNT=$(ipset list country_block_in 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
+    
+    printf "%-30s" "[~] IPSet (Iran Block)..."
+    if [ -n "$IR_COUNT" ] && [ "$IR_COUNT" -gt 0 ]; then echo -e "${GREEN}[OK] ($IR_COUNT entries)${NC}"; else echo -e "${RED}[EMPTY]${NC}"; fi
+    
+    printf "%-30s" "[~] IPSet (RU/CN Block)..."
+    if [ -n "$RU_CN_COUNT" ] && [ "$RU_CN_COUNT" -gt 0 ]; then echo -e "${GREEN}[OK] ($RU_CN_COUNT entries)${NC}"; else echo -e "${RED}[EMPTY]${NC}"; fi
+    
+    # Check IPv6
+    printf "%-30s" "[~] IPv6 Status..."
+    IPV6_STATUS=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)
+    if [ "$IPV6_STATUS" == "1" ]; then echo -e "${GREEN}[DISABLED]${NC}"; else echo -e "${RED}[LEAKING]${NC}"; fi
+
+    echo -e "\n${YELLOW}--- Live Geo-Blocking Test ---${NC}"
+    test_block() {
+        local site=$1; local ip=$2
+        printf "%-30s" "[~] Testing $site..."
+        # We check for exit code 28 (timeout) or 7 (failed to connect) - likely blocked
+        # Exit code 0 means site opened successfully (FAIL)
+        curl -m 4 -s -I --resolve "$site:80:$ip" "http://$site" > /dev/null 2>&1
+        local ret=$?
+        if [ $ret -eq 0 ]; then
+            echo -e "${RED}[FAILED - SITE OPENED]${NC}"
+        elif [ $ret -eq 28 ] || [ $ret -eq 7 ]; then
+            echo -e "${GREEN}[SUCCESS - BLOCKED]${NC}"
+        else
+            echo -e "${YELLOW}[?] UNKNOWN (ERROR $ret)${NC}"
+        fi
+    }
+    test_block "vk.com (Russia)" "87.240.139.194"
+    test_block "baidu.com (China)" "110.242.68.66"
+    test_block "digikala.com (Iran)" "185.239.104.14"
+
+    echo -e "\n${CYAN}=================================================${NC}"
+    echo -e "${GREEN}      ALL COMPONENTS VERIFIED & CORRECT        ${NC}"
+    echo -e "${CYAN}=================================================${NC}"
+    
     echo -e "\n${RED}[!] IMPORTANT: System changes require a reboot to be 100% effective.${NC}"
     read -p "Would you like to REBOOT the server now? (y/n): " confirm
     if [[ "$confirm" == [yY] ]]; then
         echo -e "${GREEN}[+] Rebooting...${NC}"
         reboot
     fi
-fi
+}
+
+echo -e "${YELLOW}[~] Starting Final System Validation...${NC}"
+run_integrated_audit

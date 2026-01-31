@@ -53,15 +53,22 @@ load_set() {
 }
 
 # Load Iran (Outbound Only)
-load_set "Iran" "ip2location_country_ir.netset" "country_block_out"
+if [ -f "ip2location_country_ir.netset" ]; then
+    load_set "Iran" "ip2location_country_ir.netset" "country_block_out"
+else
+    echo -e "${RED}[✘] Error: ip2location_country_ir.netset NOT FOUND in $(pwd)${NC}"
+    echo -e "${YELLOW}    Please upload this file to the server root!${NC}"
+fi
 
 # Load Russia & China (Inbound & Outbound)
 for cc in ru cn; do
     FILE="ip2location_country_${cc}.netset"
-    load_set "$cc" "$FILE" "country_block_in"
-    # Also add to outbound block
     if [ -f "$FILE" ]; then
+        load_set "$cc" "$FILE" "country_block_in"
+        # Also add to outbound block
         grep -v '^#' "$FILE" | tr -d '\r' | awk 'NF {print "add country_block_out " $1}' | ipset restore -exist
+    else
+        echo -e "${RED}[✘] Error: $FILE NOT FOUND in $(pwd)${NC}"
     fi
 done
 
