@@ -120,7 +120,12 @@ export DEBIAN_FRONTEND=noninteractive
 
 # 1. Update & Install Dependencies
 print_step "1/10" "Updating System & Installing Dependencies..."
-(apt update && apt upgrade -y && apt install -y curl socat wget git cmake make gcc build-essential nginx haproxy ipset iptables-persistent ufw unzip tar cron) >> $LOG_FILE 2>&1 &
+# PRE-INSTALL FIX: Purge UFW first to allow iptables-persistent
+apt purge -y ufw >> $LOG_FILE 2>&1
+apt autoremove -y >> $LOG_FILE 2>&1
+
+# Dependencies (REMOVED ufw)
+(apt update && apt upgrade -y && apt install -y curl socat wget git cmake make gcc build-essential nginx haproxy ipset iptables-persistent unzip tar cron) >> $LOG_FILE 2>&1 &
 PID=$!
 run_with_spinner $PID
 wait $PID
