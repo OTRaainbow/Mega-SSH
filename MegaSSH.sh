@@ -48,6 +48,10 @@ run_with_spinner() {
     printf "    \b\b\b\b"
 }
 
+# Helper Functions & Logging
+LOG_FILE="/root/megassh_install.log"
+exec > >(tee -a ${LOG_FILE}) 2>&1
+
 print_step() {
     echo -e "${CYAN}[Step $1] ${NC}$2"
 }
@@ -62,6 +66,7 @@ print_error() {
 
 # --- Initialization ---
 print_banner
+echo "Installation started at $(date)" >> $LOG_FILE
 
 # Variables
 PORT_SSH_INTERNAL=2222
@@ -85,15 +90,27 @@ fetch_script() {
             echo -e "${YELLOW}    1. Open MegaSSH.sh${NC}"
             echo -e "${YELLOW}    2. Change 'ChangeMe/MegaSSH' to your GitHub User/Repo${NC}"
             echo -e "${YELLOW}    3. OR place '$script_name' in this directory manually.${NC}"
+            echo "Error: REPO_BASE unconfigured while fetching $script_name" >> $LOG_FILE
             exit 1
         fi
 
-        echo -e "${YELLOW}[~] Fetching $script_name from GitHub...${NC}"
-        wget -q -O "$script_name" "${REPO_BASE}/${script_name}"
-        if [ $? -ne 0 ]; then
-            print_error "Failed to download $script_name. Check REPO_BASE URL."
+        local target_url="${REPO_BASE}/${script_name}"
+        echo -e "${YELLOW}[~] Fetching $script_name from: $target_url${NC}"
+        
+        wget -q -O "$script_name" "$target_url"
+        local ret=$?
+        
+        if [ $ret -ne 0 ]; then
+            print_error "Failed to download $script_name."
+            echo -e "${RED}    Details:${NC}"
+            echo -e "    - URL: $target_url"
+            echo -e "    - Wget Exit Code: $ret"
+            echo "Failed to fetch $target_url (Exit: $ret)" >> $LOG_FILE
             exit 1
         fi
+        echo -e "${GREEN}    Successfully downloaded $script_name${NC}"
+    else
+        echo -e "${GREEN}[✔] Found local file: $script_name${NC}"
     fi
     chmod +x "$script_name"
 }
@@ -103,12 +120,12 @@ export DEBIAN_FRONTEND=noninteractive
 
 # 1. Update & Install Dependencies
 print_step "1/10" "Updating System & Installing Dependencies..."
-(apt update && apt upgrade -y && apt install -y curl socat wget git cmake make gcc build-essential nginx haproxy ipset iptables-persistent ufw unzip tar cron) > /dev/null 2>&1 &
+(apt update && apt upgrade -y && apt install -y curl socat wget git cmake make gcc build-essential nginx haproxy ipset iptables-persistent ufw unzip tar cron) >> $LOG_FILE 2>&1 &
 run_with_spinner $!
 print_success "Dependencies Installed"
 
 # Set Root Password
-echo -e "$PASSWORD\n$PASSWORD" | passwd root > /dev/null 2>&1
+echo -e "$PASSWORD\n$PASSWORD" | passwd root >> $LOG_FILE 2>&1
 print_success "Root Password Set"
 
 # 2. System Optimizations (External)
