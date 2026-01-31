@@ -225,10 +225,10 @@ if ! grep -q "^MaxSessions" /etc/ssh/sshd_config; then
 fi
 # Active Probing Defense
 if ! grep -q "^MaxStartups" /etc/ssh/sshd_config; then
-    echo "MaxStartups 10:30:60" >> /etc/ssh/sshd_config
+    echo "MaxStartups 100:30:200" >> /etc/ssh/sshd_config
 fi
 if ! grep -q "^PerSourceMaxStartups" /etc/ssh/sshd_config; then
-    echo "PerSourceMaxStartups 1" >> /etc/ssh/sshd_config
+    echo "PerSourceMaxStartups 3" >> /etc/ssh/sshd_config
 fi
 # Disk I/O Minimization
 if ! grep -q "^LogLevel" /etc/ssh/sshd_config; then
@@ -293,20 +293,13 @@ chown -R www-data:www-data /var/log/nginx
 # Nginx Config
 cat > /etc/nginx/sites-available/default <<EOF
 server {
-    listen 127.0.0.1:${PORT_NGINX};
-    server_name localhost;
-    root /usr/share/nginx/html;
-    index index.html;
-    location / {
-        try_files \$uri \$uri/ =404;
-        add_header Host "digikala.com";
-        add_header Server "Digikala-Cdn";
-        add_header X-Powered-By "PHP/8.1";
-    }
-
-    # Logging enabled for debugging
-    access_log /var/log/nginx/access.log;
-    error_log /var/log/nginx/error.log;
+    listen 80;
+    listen [::]:80;
+    server_name _;
+    
+    # Decoy Redirect Logic
+    # Redirect ALL traffic to Digikala
+    return 301 https://www.digikala.com\$request_uri;
 }
 EOF
 echo -e "${YELLOW}[~] Validating Nginx Config...${NC}"
@@ -407,9 +400,10 @@ print_success "Max 3 Sessions/User Enforced (Global)"
 # 10. Maintenance Cron
 print_step "10/10" "Scheduling Maintenance Jobs..."
 cat > /etc/cron.d/megassh_maintenance <<EOF
+# MegaSSH Maintenance Jobs
+# Reload Nginx to keep logs fresh and config active
 */30 * * * * root systemctl reload nginx
-*/30 * * * * root sync && echo 3 > /proc/sys/vm/drop_caches
-0 */4 * * * root systemctl start rescue-ssh.target && /bin/rm -v /etc/ssh/ssh_host_* && dpkg-reconfigure openssh-server && systemctl restart ssh && systemctl restart haproxy
+# Note: Host key cycling and drop_caches removed for better stability in 2024+
 EOF
 chmod 644 /etc/cron.d/megassh_maintenance
 systemctl restart cron

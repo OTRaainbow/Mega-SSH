@@ -45,6 +45,7 @@ ufw --force reset
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow from 127.0.0.1 to any # Allow Localhost for HAProxy/Nginx internals
+ufw allow 80/tcp           # HTTP (Decoy Redirect)
 ufw allow ${PORT_HAPROXY}/tcp  # 443
 ufw allow ${PORT_UDPGW}/tcp    # 7301
 ufw allow ${PORT_UDPGW}/udp    # 7301
@@ -74,9 +75,22 @@ else
     echo -e "\033[1;31m[!] WARNING: Geo-Whitelist is EMPTY. Skipping Drop Rule to prevent Lockout.\033[0m"
 fi
 
-# Drop Outgoing to IR (Prevent Leaks)
-iptables -t raw -I PREROUTING -m set --match-set country_block_out dst -j DROP
-iptables -t raw -I OUTPUT -m set --match-set country_block_out dst -j DROP
+# Drop Outgoing to IR (Prevent Leaks) - STATEFUL MODE
+# OLD (Stateless): Dropped everything, killing SSH.
+# iptables -t raw -I PREROUTING -m set --match-set country_block_out dst -j DROP
+# iptables -t raw -I OUTPUT -m set --match-set country_block_out dst -j DROP
+
+# NEW (Stateful): Allow SSH (Established), Block Browsing (New/Forward)
+echo -e "\033[1;36m[+] Applying Smart Geo-Blocking (Allow SSH, Block Browsing)...\033[0m"
+
+# 1. Allow ESTABLISHED connections (Fixes SSH reply)
+iptables -A OUTPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+# 2. Block VPN Clients from accessing Iran (Forwarding)
+iptables -A FORWARD -m set --match-set country_block_out dst -j DROP
+
+# 3. Block Server from initiating NEW connections to Iran (Leak Prevention)
+iptables -A OUTPUT -m set --match-set country_block_out dst -m state --state NEW -j DROP
 
 # MSS Clamping (Packet Size Tuning - 1360)
 # Helps evade filtering by limiting packet size to avoid fragmentation

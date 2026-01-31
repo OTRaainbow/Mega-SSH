@@ -114,22 +114,38 @@ warp-cli --accept-tos mode warp
 # -------------------------------------------------------------
 print_step "Applying Anti-Lockout Rules..."
 
-# 1. Detect Server Public IP (Fixes return path routing)
-SERVER_IP=$(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v "127.0.0.1" | head -n 1)
-if [ -n "$SERVER_IP" ]; then
-    echo -e "${YELLOW}[+] Excluding Server IP: ${SERVER_IP}${NC}"
-    # 1. WARP Exclusion (Tunnel Split)
-    warp-cli --accept-tos tunnel ip add "$SERVER_IP" > /dev/null 2>&1
-    
-    # 2. Policy Routing (Force Direct Return Path)
-    # This is critical! It forces replies from the server's real IP to ignore WARP.
-    if ! ip rule show | grep -q "$SERVER_IP"; then
-        echo -e "${YELLOW}[+] Adding Policy Routing (Fixes SSH/Iran access)...${NC}"
-        ip rule add from "$SERVER_IP" lookup main prio 1000
-    fi
-fi
+# -------------------------------------------------------------
+# ROBUST ROUTING: FwMark Bypass (Fixes Iran/VPN Blocks)
+# -------------------------------------------------------------
+print_step "Applying Enhanced Routing (FwMark)..."
 
-# 2. Detect Current SSH Client IP (Backup access)
+# 1. Clean up old rules
+ip rule del fwmark 0x100 lookup main 2>/dev/null
+
+# 2. Add Routing Rule
+# Traffic marked with 0x100 uses specific table (main) -> Bypasses WARP
+ip rule add fwmark 0x100 lookup main prio 900
+
+# 3. Mark Outgoing Traffic from Service Ports
+# We explicitly mark packets originating from our VPN/SSH ports so they behave "Normally"
+PORTS_TCP="22 443 2222 2223 2224 2225 7301 8443 9443"
+PORTS_UDP="7301"
+
+echo -e "${YELLOW}[+] Marking Service Ports (Bypassing WARP for Inbound/Outbound consistency)...${NC}"
+
+# TCP Ports
+for PORT in $PORTS_TCP; do
+   iptables -t mangle -D OUTPUT -p tcp --sport $PORT -j MARK --set-mark 0x100 2>/dev/null
+   iptables -t mangle -A OUTPUT -p tcp --sport $PORT -j MARK --set-mark 0x100
+done
+
+# UDP Ports
+for PORT in $PORTS_UDP; do
+   iptables -t mangle -D OUTPUT -p udp --sport $PORT -j MARK --set-mark 0x100 2>/dev/null
+   iptables -t mangle -A OUTPUT -p udp --sport $PORT -j MARK --set-mark 0x100
+done
+
+# 4. Detect Current SSH Client IP (Backup access)
 CLIENT_IP=$(echo $SSH_CLIENT | awk '{print $1}')
 if [ -n "$CLIENT_IP" ]; then
     echo -e "${YELLOW}[+] Excluding Your IP:   ${CLIENT_IP}${NC}"

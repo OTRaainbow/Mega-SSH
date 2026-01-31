@@ -9,16 +9,17 @@
 PORT_SHADOWTLS=9443
 PORT_SSH_INTERNAL=2222
 HANDSHAKE_DOMAIN="www.microsoft.com:443"
-VERSION="v3.0.0" # or latest
-
-echo -e "\033[1;36m[+] Initializing ShadowTLS (v3)...\033[0m"
-
 # 1. Download Registry
-# Since releases are on GitHub, we'll try to fetch latest or use a fixed stable URL.
-# For stability in this script, we assume a standard Linux AMD64 environment.
-DOWNLOAD_URL="https://github.com/ihciah/shadow-tls/releases/latest/download/shadow-tls-x86_64-unknown-linux-musl"
+echo -e "\033[1;33m[~] Fetching latest ShadowTLS version...\033[0m"
+LATEST_TAG=$(curl -s https://api.github.com/repos/ihciah/shadow-tls/releases/latest | grep -oP '"tag_name": "\K[^"]+')
+if [ -z "$LATEST_TAG" ]; then
+    LATEST_TAG="v0.2.25" # Fallback if API fails
+    echo -e "\033[1;31m[!] Failed to fetch tag, using fallback: $LATEST_TAG\033[0m"
+fi
 
-echo -e "\033[1;33m[~] Downloading ShadowTLS binary...\033[0m"
+DOWNLOAD_URL="https://github.com/ihciah/shadow-tls/releases/download/${LATEST_TAG}/shadow-tls-x86_64-unknown-linux-musl"
+
+echo -e "\033[1;33m[~] Downloading ShadowTLS ${LATEST_TAG}...\033[0m"
 curl -L -o /usr/local/bin/shadow-tls "$DOWNLOAD_URL"
 if [ $? -ne 0 ]; then
     echo -e "\033[0;31m[✘] Failed to download ShadowTLS binary.\033[0m"

@@ -63,8 +63,8 @@ net.ipv4.tcp_fin_timeout = 10
 net.ipv4.tcp_keepalive_probes = 3
 # Ring buffer backlog for traffic spikes
 net.core.netdev_max_backlog = 65535
-# Queue Discipline (FQ-PIE for BBRv3 + Anti-Jitter)
-net.core.default_qdisc = fq_pie
+# Queue Discipline (Fair Queueing for BBRv3 Optimization)
+net.core.default_qdisc = fq
 
 # Disable IPv6 (Optional but recommended for speed logic if not used)
 net.ipv6.conf.all.disable_ipv6 = 1
