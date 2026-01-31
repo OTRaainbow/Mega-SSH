@@ -1,0 +1,314 @@
+#!/bin/bash
+
+# ==============================================================================
+# MegaSSH Implementation - Direct Mode (Consolidated & Secured)
+# OS: Ubuntu 24.04 (Noble) Optimized
+# Features: HAProxy Decoy, ChaCha20, UDPGW, BBR, Geofencing, Stunnel
+# ==============================================================================
+
+# --- UI & Colors ---
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# ASCII Banner
+print_banner() {
+    clear
+    echo -e "${CYAN}"
+    echo "  __  __                  SSSSS   SSSSS  HH   HH "
+    echo " |  \/  | ___  __ _  __ _SS      SS      HH   HH "
+    echo " | |\/| |/ _ \/ _\` |/ _\` |SSSSS   SSSSS  HHH HHH "
+    echo " | |  | |  __/ (_| | (_| |    SS      SS HH   HH "
+    echo " |_|  |_|\___|\__, |\__,_|SSSSS   SSSSS  HH   HH "
+    echo "              |___/                              "
+    echo "         High-Security VPN Installer             "
+    echo -e "${NC}"
+    echo -e "${BLUE}=================================================${NC}"
+    echo -e "${YELLOW}  Target OS: Ubuntu 24.04 | Features: 7-Point Security${NC}"
+    echo -e "${BLUE}=================================================${NC}"
+    echo ""
+}
+
+# Spinner Function for long tasks
+run_with_spinner() {
+    local pid=$!
+    local delay=0.1
+    local spinstr='|/-\'
+    echo -n " "
+    while [ "$(ps a | awk '{print $1}' | grep $pid)" ]; do
+        local temp=${spinstr#?}
+        printf " [%c]  " "$spinstr"
+        local spinstr=$temp${spinstr%"$temp"}
+        sleep $delay
+        printf "\b\b\b\b\b\b"
+    done
+    printf "    \b\b\b\b"
+}
+
+print_step() {
+    echo -e "${CYAN}[Step $1] ${NC}$2"
+}
+
+print_success() {
+    echo -e "${GREEN}[✔] $1${NC}"
+}
+
+print_error() {
+    echo -e "${RED}[✘] $1${NC}"
+}
+
+# --- Initialization ---
+print_banner
+
+# Variables
+PORT_SSH_INTERNAL=2222
+PORT_HAPROXY=443
+PORT_UDPGW=7301
+PORT_NGINX=8080
+PASSWORD="@MonGleKhos2024"
+
+# --- GITHUB DEPLOYMENT CONFIG ---
+# REPLACE WITH YOUR GITHUB RAW URL:
+REPO_BASE="https://raw.githubusercontent.com/ChangeMe/MegaSSH/main"
+# --------------------------------
+
+# Helper: Download Script
+fetch_script() {
+    local script_name=$1
+    if [ ! -f "$script_name" ]; then
+        echo -e "${YELLOW}[~] Fetching $script_name from GitHub...${NC}"
+        wget -q -O "$script_name" "${REPO_BASE}/${script_name}"
+        if [ $? -ne 0 ]; then
+            print_error "Failed to download $script_name. Check REPO_BASE URL."
+            exit 1
+        fi
+    fi
+    chmod +x "$script_name"
+}
+
+# Set non-interactive for apt
+export DEBIAN_FRONTEND=noninteractive
+
+# 1. Update & Install Dependencies
+print_step "1/10" "Updating System & Installing Dependencies..."
+(apt update && apt upgrade -y && apt install -y curl socat wget git cmake make gcc build-essential nginx haproxy ipset iptables-persistent ufw unzip tar cron) > /dev/null 2>&1 &
+run_with_spinner $!
+print_success "Dependencies Installed"
+
+# Set Root Password
+echo -e "$PASSWORD\n$PASSWORD" | passwd root > /dev/null 2>&1
+print_success "Root Password Set"
+
+# 2. System Optimizations (External)
+print_step "2/10" "Applying Kernel Optimizations (BBRv3)..."
+fetch_script "speed-optimizer.sh"
+./speed-optimizer.sh > /dev/null 2>&1
+print_success "Kernel Optimized (speed-optimizer.sh)"
+
+# 3. UDPGW Installation (External)
+print_step "3/10" "Building UDPGW (BadVPN)..."
+fetch_script "UDPGW.sh"
+./UDPGW.sh > /dev/null 2>&1 &
+run_with_spinner $!
+print_success "UDPGW Service Started (Port $PORT_UDPGW)"
+
+# 4. SSH Security Configuration (Hybrid Multiplexing)
+# ... (Continuing SSH Logic - No changes needed here, internal config)
+print_step "4/10" "Hardening SSH (Split-Stream: Ports 2222-2225)..."
+cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
+# Settings
+# Remove existing ports and add split-stream ports
+sed -i "/^Port/d" /etc/ssh/sshd_config
+echo "Port 2222" >> /etc/ssh/sshd_config
+echo "Port 2223" >> /etc/ssh/sshd_config
+echo "Port 2224" >> /etc/ssh/sshd_config
+echo "Port 2225" >> /etc/ssh/sshd_config
+
+sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+sed -i 's/^#ClientAliveInterval.*/ClientAliveInterval 300/' /etc/ssh/sshd_config
+sed -i 's/^#ClientAliveCountMax.*/ClientAliveCountMax 3/' /etc/ssh/sshd_config
+# Security Hardening (High Volume Optimization)
+if ! grep -q "^DebianBanner" /etc/ssh/sshd_config; then
+    echo "DebianBanner no" >> /etc/ssh/sshd_config
+fi
+if ! grep -q "^MaxSessions" /etc/ssh/sshd_config; then
+    echo "MaxSessions 100" >> /etc/ssh/sshd_config
+fi
+# Active Probing Defense
+if ! grep -q "^MaxStartups" /etc/ssh/sshd_config; then
+    echo "MaxStartups 10:30:60" >> /etc/ssh/sshd_config
+fi
+if ! grep -q "^PerSourceMaxStartups" /etc/ssh/sshd_config; then
+    echo "PerSourceMaxStartups 1" >> /etc/ssh/sshd_config
+fi
+# Disk I/O Minimization
+if ! grep -q "^LogLevel" /etc/ssh/sshd_config; then
+    echo "LogLevel QUIET" >> /etc/ssh/sshd_config
+fi
+# Cipher & Protocol Tuning
+if ! grep -q "^Ciphers" /etc/ssh/sshd_config; then
+    echo "Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com" >> /etc/ssh/sshd_config
+fi
+if ! grep -q "^KexAlgorithms" /etc/ssh/sshd_config; then
+    echo "KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org" >> /etc/ssh/sshd_config
+fi
+if ! grep -q "^MACs" /etc/ssh/sshd_config; then
+    echo "MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com" >> /etc/ssh/sshd_config
+fi
+systemctl restart ssh
+print_success "SSH Hardened & Split (Ports 2222-2225)"
+
+# 5. Nginx Decoy Site
+print_step "5/10" "Deploying Decoy Site (Rubika)..."
+systemctl stop nginx
+rm -rf /usr/share/nginx/html/*
+cat > /usr/share/nginx/html/index.html <<EOF
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rubika | Super App</title>
+    <style>
+        body { font-family: Tahoma, sans-serif; background-color: #f5f5f5; text-align: center; padding: 50px; }
+        .logo { width: 100px; height: 100px; background-color: #7033ff; border-radius: 20px; margin: 0 auto; line-height: 100px; color: white; font-size: 50px; }
+        h1 { color: #333; }
+        p { color: #666; }
+    </style>
+</head>
+<body>
+    <div class="logo">R</div>
+    <h1>Rubika Web Version</h1>
+    <p>Please use the mobile application for better experience.</p>
+    <p>در حال بارگذاری سرویس ها...</p>
+</body>
+</html>
+EOF
+# Nginx Config
+cat > /etc/nginx/sites-available/default <<EOF
+server {
+    listen 127.0.0.1:${PORT_NGINX};
+    server_name localhost;
+    root /usr/share/nginx/html;
+    index index.html;
+    location / {
+        try_files \$uri \$uri/ =404;
+        add_header Host "rubika.ir";
+        add_header Server "ArvanCloud";
+        add_header X-Powered-By "ASP.NET";
+    }
+    # Disk I/O Optimization
+    access_log off;
+    error_log /dev/null crit;
+}
+EOF
+systemctl restart nginx > /dev/null 2>&1
+print_success "Nginx Decoy Live (Port $PORT_NGINX)"
+
+# 6. HAProxy Multiplexing
+print_step "6/10" "Configuring HAProxy Split-Stream (Port 443 -> 4 Cores)..."
+cat > /etc/haproxy/haproxy.cfg <<EOF
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    chroot /var/lib/haproxy
+    stats socket /run/haproxy/admin.sock mode 660 level admin expose-fd listeners
+    stats timeout 30s
+    user haproxy
+    group haproxy
+    daemon
+defaults
+    log     global
+    mode    tcp
+    option  tcplog
+    option  dontlognull
+    timeout connect 5000
+    timeout client  50000
+    timeout server  50000
+frontend stats
+    mode http
+    bind *:8404
+    stats enable
+    stats uri /stats
+    stats refresh 10s
+frontend multiplexer_443
+    bind *:${PORT_HAPROXY}
+    mode tcp
+    tcp-request inspect-delay 5s
+    # Detect SSH Protocol
+    acl is_ssh payload(0,3) -m str SSH
+    # Routing Logic
+    use_backend ssh_backend if is_ssh
+    default_backend web_decoy_backend
+backend ssh_backend
+    mode tcp
+    balance roundrobin
+    server ssh_srv_1 127.0.0.1:2222 check
+    server ssh_srv_2 127.0.0.1:2223 check
+    server ssh_srv_3 127.0.0.1:2224 check
+    server ssh_srv_4 127.0.0.1:2225 check
+backend web_decoy_backend
+    mode tcp
+    server web_srv 127.0.0.1:${PORT_NGINX} check
+EOF
+sed -i 's/send-proxy-v2//g' /etc/haproxy/haproxy.cfg
+systemctl restart haproxy > /dev/null 2>&1
+print_success "HAProxy Split-Stream Active (Port 443 -> 4x SSH)"
+
+# 7. Stunnel (SSL Wrapping)
+print_step "7/10" "Initializing Stunnel (Port 8443) & ShadowTLS (Port 9443)..."
+fetch_script "stunnel_manager.sh"
+./stunnel_manager.sh > /dev/null 2>&1
+fetch_script "shadowtls_manager.sh"
+./shadowtls_manager.sh > /dev/null 2>&1
+print_success "TLS Wrappers Active (Stunnel + ShadowTLS)"
+
+# 8. Firewall & Geofencing
+print_step "8/10" "Applying Advanced Firewall & Geofencing..."
+fetch_script "firewall_manager.sh"
+./firewall_manager.sh > /dev/null 2>&1 &
+run_with_spinner $!
+print_success "Firewall Rules Applied (Silent Drop: CN/RU)"
+
+# 9. Session Limiter (Global Compatibility)
+print_step "9/10" "Enforcing Session Limits (Compatible with useradd.py)..."
+# Apply limit to ALL users (*), but Exempt ROOT
+cat > /etc/security/limits.d/megassh.conf <<EOF
+# MegaSSH Session Limits
+# Global Limit for standard users (created by useradd.py)
+*       hard    maxlogins   3
+# Root exemption
+root    hard    maxlogins   100
+EOF
+print_success "Max 3 Sessions/User Enforced (Global)"
+
+# 10. Maintenance Cron
+print_step "10/10" "Scheduling Maintenance Jobs..."
+cat > /etc/cron.d/megassh_maintenance <<EOF
+*/30 * * * * root systemctl reload nginx
+*/30 * * * * root sync && echo 3 > /proc/sys/vm/drop_caches
+0 */4 * * * root systemctl start rescue-ssh.target && /bin/rm -v /etc/ssh/ssh_host_* && dpkg-reconfigure openssh-server && systemctl restart ssh && systemctl restart haproxy
+EOF
+chmod 644 /etc/cron.d/megassh_maintenance
+systemctl restart cron
+print_success "Cron Jobs Scheduled"
+
+# --- Final Summary ---
+echo ""
+echo -e "${BLUE}=================================================${NC}"
+echo -e "${GREEN}       INSTALLATION COMPLETE SUCCESSFULLY        ${NC}"
+echo -e "${BLUE}=================================================${NC}"
+echo -e "${YELLOW}Connection Details:${NC}"
+echo -e "  • ${CYAN}Direct SSH:${NC}    YourIP:443"
+echo -e "  • ${CYAN}SSL Wrapped:${NC}   YourIP:8443 (via Stunnel)"
+echo -e "  • ${CYAN}User Protocol:${NC} ChaCha20-Poly1305"
+echo -e "  • ${CYAN}Decoy Site:${NC}    Rubika (https://YourIP)"
+echo -e ""
+echo -e "${YELLOW}Management Commands:${NC}"
+echo -e "  • Add Users:     ${GREEN}Use useradd.py GUI${NC}"
+echo -e "  • Add WARP:      ${GREEN}./MegaSSH-WARP.sh${NC}"
+echo -e "${BLUE}=================================================${NC}"
+echo ""

@@ -1,0 +1,58 @@
+#!/bin/bash
+
+# ==============================================================================
+# ShadowTLS Manager (v3)
+# Advanced "Wrapper" that mimics legitimate TLS handshakes (e.g., to Microsoft)
+# Listen: 9443 -> Handshake: www.microsoft.com -> Forward: 2222 (SSH)
+# ==============================================================================
+
+PORT_SHADOWTLS=9443
+PORT_SSH_INTERNAL=2222
+HANDSHAKE_DOMAIN="www.microsoft.com:443"
+VERSION="v3.0.0" # or latest
+
+echo -e "\033[1;36m[+] Initializing ShadowTLS (v3)...\033[0m"
+
+# 1. Download Registry
+# Since releases are on GitHub, we'll try to fetch latest or use a fixed stable URL.
+# For stability in this script, we assume a standard Linux AMD64 environment.
+DOWNLOAD_URL="https://github.com/ihciah/shadow-tls/releases/latest/download/shadow-tls-x86_64-unknown-linux-musl"
+
+echo -e "\033[1;33m[~] Downloading ShadowTLS binary...\033[0m"
+curl -L -o /usr/local/bin/shadow-tls "$DOWNLOAD_URL"
+if [ $? -ne 0 ]; then
+    echo -e "\033[0;31m[✘] Failed to download ShadowTLS binary.\033[0m"
+    exit 1
+fi
+chmod +x /usr/local/bin/shadow-tls
+
+# 2. Create Service
+echo -e "\033[1;33m[~] Configuring Service (Port $PORT_SHADOWTLS)...\033[0m"
+cat > /etc/systemd/system/shadow-tls.service <<EOF
+[Unit]
+Description=ShadowTLS Wrapper
+After=network.target
+
+[Service]
+# Mode: Server
+# Listen: $PORT_SHADOWTLS
+# Server to mimicking: $HANDSHAKE_DOMAIN
+# Target (our SSH): 127.0.0.1:$PORT_SSH_INTERNAL
+# Password: Let's use a random or fixed password. For SSH wrapper, the password is used by the client wrapper.
+# We'll use the same PASSWORD variable style if needed, or a fixed one for the tunnel.
+# ShadowTLS V3 syntax: shadow-tls --fastopen server --listen 0.0.0.0:9443 --server 127.0.0.1:2222 --tls www.microsoft.com:443 --password mypassword
+ExecStart=/usr/local/bin/shadow-tls --fastopen server --listen 0.0.0.0:${PORT_SHADOWTLS} --server 127.0.0.1:${PORT_SSH_INTERNAL} --tls ${HANDSHAKE_DOMAIN} --password megassh
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 3. Enable & Start
+systemctl daemon-reload
+systemctl enable --now shadow-tls
+
+echo -e "\033[1;32m[+] ShadowTLS Active on Port $PORT_SHADOWTLS.\033[0m"
+echo -e "    - Mimicking: $HANDSHAKE_DOMAIN"
+echo -e "    - Password:  megassh"
