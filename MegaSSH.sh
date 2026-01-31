@@ -73,6 +73,8 @@ check_service_health() {
     
     if ! systemctl is-active --quiet "$service"; then
         echo -e "\n${RED}[✘] CRITICAL: $service service failed to start!${NC}"
+        echo -e "${YELLOW}--- Service Status ---${NC}"
+        systemctl status "$service" --no-pager
         echo -e "${YELLOW}--- Last 15 lines of $service logs ---${NC}"
         journalctl -u "$service" --no-pager -n 15
         echo -e "${RED}[!] Installation aborted. Please fix the error above.${NC}"
@@ -295,11 +297,19 @@ server {
         add_header Server "Digikala-Cdn";
         add_header X-Powered-By "PHP/8.1";
     }
-    # Disk I/O Optimization
-    access_log off;
-    error_log /dev/null crit;
+
+    # Logging enabled for debugging
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
 }
 EOF
+echo -e "${YELLOW}[~] Validating Nginx Config...${NC}"
+nginx -t
+if [ $? -ne 0 ]; then
+    print_error "Nginx Config is Invalid!"
+    exit 1
+fi
+
 systemctl restart nginx > /dev/null 2>&1
 # Verify Nginx
 check_service_health "nginx" "$PORT_NGINX"
