@@ -27,7 +27,7 @@ print_banner() {
     echo "         High-Security VPN Installer             "
     echo -e "${NC}"
     echo -e "${BLUE}=================================================${NC}"
-    echo -e "${YELLOW}  Target OS: Ubuntu 24.04 | Version: 4.0 (Nuclear Enforcement)${NC}"
+    echo -e "${YELLOW}  Target OS: Ubuntu 24.04 | Version: 4.5 (Nuclear Priority Fix)${NC}"
     echo -e "${BLUE}=================================================${NC}"
     echo ""
 }
@@ -501,12 +501,14 @@ run_integrated_audit() {
     if [ -n "$RU_CN_COUNT" ] && [ "$RU_CN_COUNT" -gt 0 ]; then echo -e "${GREEN}[OK] ($RU_CN_COUNT entries)${NC}"; else echo -e "${RED}[EMPTY]${NC}"; fi
     
     # Check Policy Routing (FWMark 0x99 -> Table 200)
-    printf "%-30s" "[~] Nuclear Routing (Rule Pri 5)..."
-    if ip rule show | grep -q "priority 5.*from all fwmark 0x99 lookup 200"; then 
+    printf "%-30s" "[~] Nuclear Routing (Rule Pri 2)..."
+    # Match format like "2:   from all fwmark 0x99 lookup 200"
+    if ip rule show | grep -q "^2:.*fwmark 0x99.*lookup 200"; then 
         echo -e "${GREEN}[ACTIVE]${NC}"
     else 
         echo -e "${RED}[BYPASS RISK]${NC}"
-        echo -e "    ${YELLOW}(Rule priority is not 5 - Tunnel might bypass)${NC}"
+        echo -e "    ${YELLOW}Active Rules Summary (First 5):${NC}"
+        ip rule show | head -n 5
     fi
 
     printf "%-30s" "[~] Blackhole Table 200..."
