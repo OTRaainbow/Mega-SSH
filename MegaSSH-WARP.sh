@@ -94,20 +94,20 @@ print_success "WARP Service Active"
 print_step "3/4" "Registering WARP Account..."
 # Reset state if re-running
 warp-cli --accept-tos disconnect > /dev/null 2>&1
-warp-cli --accept-tos delete > /dev/null 2>&1
+warp-cli --accept-tos registration delete > /dev/null 2>&1
 
 # Register with verbose output
-if ! warp-cli --accept-tos register; then
+if ! warp-cli --accept-tos registration new; then
     print_error "Registration Failed! Retrying with clean state..."
     rm -rf /var/lib/cloudflare-warp/*
     systemctl restart warp-svc
     sleep 3
-    warp-cli --accept-tos register
+    warp-cli --accept-tos registration new
 fi
 print_success "Account Registered"
 
 print_step "4/4" "Configuring WARP Mode (Global Routing)..."
-warp-cli --accept-tos set-mode warp
+warp-cli --accept-tos mode warp
 echo -e "${YELLOW}[~] Connecting to WARP (This may take a moment)...${NC}"
 warp-cli --accept-tos connect
 
