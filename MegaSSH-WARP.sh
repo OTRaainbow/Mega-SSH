@@ -36,8 +36,8 @@ print_error() { echo -e "${RED}[✘] $1${NC}"; }
 print_banner
 
 # --- GITHUB DEPLOYMENT CONFIG ---
-# REPLACE WITH YOUR GITHUB RAW URL:
-REPO_BASE="https://raw.githubusercontent.com/ChangeMe/MegaSSH/main"
+# YOUR GITHUB CONFIGURATION:
+REPO_BASE="https://raw.githubusercontent.com/OTRaainbow/Mega-SSH/main"
 # --------------------------------
 
 # 1. Run Base Setup first
