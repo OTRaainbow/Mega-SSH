@@ -385,20 +385,20 @@ print_success "TLS Wrappers Active (Stunnel + ShadowTLS)"
 
 # 8. Firewall & Geofencing
 print_step "8/10" "Applying Advanced Firewall & Geofencing..."
-# Fetching High-Quality FireHOL Blocklists
-download_firehol() {
+# Fetching IP Lists from your GitHub automatically (OTRaainbow Source)
+download_user_list() {
     local cc=$1
-    local url="https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/ip2location_country_${cc}.netset"
-    echo -e "${YELLOW}[~] Downloading FireHOL $cc List...${NC}"
+    local url="https://raw.githubusercontent.com/OTRaainbow/Mega-SSH/main/ip2location_country_${cc}.netset"
+    echo -e "${YELLOW}[~] Downloading $cc List from your GitHub...${NC}"
     wget -q -O "ip2location_country_${cc}.netset" "$url"
 }
-download_firehol "ir"
-download_firehol "ru"
-download_firehol "cn"
+download_user_list "ir"
+download_user_list "ru"
+download_user_list "cn"
 
 fetch_script "firewall_manager.sh"
 ./firewall_manager.sh
-print_success "Firewall Rules Applied (Zero-Leak Mode Active)"
+print_success "Firewall Rules Applied (Zero-Leak V3 Active)"
 
 # 9. Session Limiter (Global Compatibility)
 print_step "9/10" "Enforcing Session Limits (Compatible with useradd.py)..."
