@@ -17,107 +17,89 @@ NC='\033[0m' # No Color
 apt update
 apt install -y ipset iptables-persistent ufw curl
 
+# 1. Initialize IPSet Lists (High Capacity)
+echo -e "\033[1;33m[~] Creating High-Capacity IPSet Lists...\033[0m"
+# Set maxelem to 500,000 to handle the huge IP2Location lists
+ipset create country_block_in hash:net maxelem 500000 -exist
+ipset create country_block_out hash:net maxelem 500000 -exist
+ipset flush country_block_in
+ipset flush country_block_out
+
 # 2. Populate IP Sets from IP2Location Netset Files
 echo -e "\033[1;33m[~] Populating IP Sets from IP2Location Files...\033[0m"
 
-# Create Iran Set (For Outbound Block)
-ipset -L country_block_out >/dev/null 2>&1 || ipset create country_block_out hash:net
-ipset flush country_block_out # Clear existing entries for fresh load
+# Load IR (Outbound Only)
 if [ -f ip2location_country_ir.netset ]; then
     grep -v '^#' ip2location_country_ir.netset | while read line; do 
         [ -n "$line" ] && ipset -A country_block_out $line
     done
-    echo -e "${GREEN}[✔] Loaded IP2Location Iran (Outbound Block)${NC}"
+    echo -e "${GREEN}[✔] Loaded IP2Location Iran (Outbound Only)${NC}"
 else
     echo -e "${RED}[✘] Error: ip2location_country_ir.netset not found!${NC}"
 fi
 
-# Create Russia/China Sets (For Inbound & Outbound Block)
-ipset -L country_block_in >/dev/null 2>&1 || ipset create country_block_in hash:net
-ipset flush country_block_in # Clear existing entries for fresh load
+# Load RU/CN (Inbound & Outbound)
 for cc in ru cn; do
     FILE="ip2location_country_${cc}.netset"
     if [ -f "$FILE" ]; then
+        echo -e "${YELLOW}[~] Processing $FILE...${NC}"
         grep -v '^#' "$FILE" | while read line; do
             if [ -n "$line" ]; then
                 ipset -A country_block_in $line
-                ipset -A country_block_out $line # Also block outbound to these countries
+                ipset -A country_block_out $line
             fi
         done
-        echo -e "${GREEN}[✔] Loaded $FILE (Inbound/Outbound Block)${NC}"
+        echo -e "${GREEN}[✔] Loaded $FILE (Inbound/Outbound)${NC}"
     else
         echo -e "${RED}[✘] Error: $FILE not found!${NC}"
     fi
 done
 
-echo -e "\033[1;32m[+] IP Lists Populated (Blocked: RU/CN Inbound/Outbound, IR Outbound).\033[0m"
+echo -e "\033[1;32m[+] IP Lists Populated. Total Rules: $(ipset list | grep 'Number of entries' | awk '{sum+=$4} END {print sum}')${NC}"
 
-# 3. Apply IPTable Rules
-echo -e "\033[1;33m[~] Applying Whitelist Rules (Paranoid Mode)...\033[0m"
+# 3. Apply IPTable Rules (AGGRESSIVE MODE)
+echo -e "\033[1;33m[~] Applying Aggressive Firewall Rules...${NC}"
 
-# Configure UFW
+# Configure UFW (Base Layer)
 ufw --force reset
 ufw default deny incoming
 ufw default allow outgoing
-ufw allow from 127.0.0.1 to any # Allow Localhost for HAProxy/Nginx internals
-ufw allow 80/tcp           # HTTP (Decoy Redirect)
-ufw allow ${PORT_HAPROXY}/tcp  # 443
-ufw allow ${PORT_UDPGW}/tcp    # 7301
-ufw allow ${PORT_UDPGW}/udp    # 7301
-ufw allow 8443/tcp             # Stunnel (SSL SSH)
-ufw allow 9443/tcp             # ShadowTLS (Advanced)
-ufw allow 22/tcp               # Rescue SSH (CRITICAL)
-# ufw allow 2222:2225/tcp    # (Disabled: Only Port 443 External)
+ufw allow 22/tcp
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw allow 7301/tcp
+ufw allow 7301/udp
+ufw allow 8443/tcp
+ufw allow 9443/tcp
 
-# --- GEO-LOCKING (IRAN ONLY) ---
-# Strategy: Drop everything NOT from Iran (Whitelist)
-# Warning: Ensure you have console access or are in Iran!
-# We use RAW table for performance (XDP-Lite)
+# --- AGGRESSIVE GEO-BLOCKING ---
 
-# Allow Localhost
-iptables -t raw -A PREROUTING -i lo -j ACCEPT
-# Allow Established
-iptables -t raw -A PREROUTING -m state --state RELATED,ESTABLISHED -j ACCEPT
+# [A] INBOUND BLOCK (Russia/China)
+# We use -I to ensure these are at the VERY TOP of the RAW table
+iptables -t raw -F PREROUTING # Clear previous rules in PREROUTING
+iptables -t raw -I PREROUTING -i lo -j ACCEPT
+iptables -t raw -I PREROUTING -m state --state RELATED,ESTABLISHED -j ACCEPT
+iptables -t raw -A PREROUTING -m set --match-set country_block_in src -j DROP
 
-# SAFETY CHECK: Only apply DROP if the Whitelist is populated
-if ipset list country_allow_in | grep -q "Number of entries: [1-9]"; then
-    echo -e "\033[1;32m[+] Geo-Whitelist populated.\033[0m"
-    echo -e "\033[1;31m[!] Dropping Inbound connections from Blocked Countries (RU/CN)... \033[0m"
-    # Drop if in the Block In Set (Ingress)
-    iptables -t raw -A PREROUTING -m set --match-set country_block_in src -j DROP
-    # Drop if NOT in Iran IP Set (Ingress) - DISABLED BY DEFAULT (Risk of lockout if user not in IR)
-    # iptables -t raw -A PREROUTING -m set ! --match-set country_allow_in src -j DROP
-else
-    echo -e "\033[1;31m[!] WARNING: Geo-Whitelist is EMPTY. Skipping Drop Rule to prevent Lockout.\033[0m"
-fi
+# [B] OUTBOUND BLOCK (Iran/Russia/China) - VPN LEAK PROTECTION
+# 1. Block for VPN Clients (Forwarded traffic)
+iptables -I FORWARD -m set --match-set country_block_out dst -j DROP
 
-# Drop Outgoing to IR (Prevent Leaks) - STATEFUL MODE
-# OLD (Stateless): Dropped everything, killing SSH.
-# iptables -t raw -I PREROUTING -m set --match-set country_block_out dst -j DROP
-# iptables -t raw -I OUTPUT -m set --match-set country_block_out dst -j DROP
-
-# NEW (Stateful): Allow SSH (Established), Block Browsing (New/Forward)
-echo -e "\033[1;36m[+] Applying Smart Geo-Blocking (Allow SSH, Block Browsing)...\033[0m"
-
-# 1. Allow ESTABLISHED connections (Fixes SSH reply)
-iptables -A OUTPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
-
-# 2. Block VPN Clients from accessing Iran, Russia, China (Forwarding)
-iptables -A FORWARD -m set --match-set country_block_out dst -j DROP
-iptables -A FORWARD -m set --match-set country_block_out dst -j LOG --log-prefix "FIREWALL_BLOCK_OUT: "
-
-# 3. Block Server from initiating NEW connections to these countries
+# 2. Block for Server Processes (SOCKS/HAProxy/System) - Catching outgoing NEW connections
+iptables -I OUTPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
 iptables -A OUTPUT -m set --match-set country_block_out dst -m state --state NEW -j DROP
 
-# MSS Clamping (Packet Size Tuning - 1360)
-# Helps evade filtering by limiting packet size to avoid fragmentation
-# User Strategy Point 4: "Eliminate fingerprint of classic VPN tunnels"
+# 3. MSS Clamping for Stealth
 iptables -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1360
 
-# 4. Save Rules (Persistence)
+# --- Persistence ---
 mkdir -p /etc/iptables
 iptables-save > /etc/iptables/rules.v4
 netfilter-persistent save > /dev/null 2>&1
-systemctl enable netfilter-persistent
 
-echo -e "\033[1;32m[+] Firewall Rules Applied & Saved.\033[0m"
+echo -e "\033[1;32m[+] Aggressive Firewall Rules Applied.${NC}"
+echo -e "${CYAN}--- DEBUG COMMANDS ---${NC}"
+echo -e "  To check if IPs are blocked: ${YELLOW}ipset list country_block_out | head -n 20${NC}"
+echo -e "  To check active drops:       ${YELLOW}iptables -t raw -L PREROUTING -v -n${NC}"
+echo -e "  To check VPN drops:          ${YELLOW}iptables -L FORWARD -v -n${NC}"
+echo -e "${CYAN}-----------------------${NC}"
