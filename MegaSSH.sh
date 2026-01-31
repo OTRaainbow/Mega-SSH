@@ -284,6 +284,12 @@ cat > /usr/share/nginx/html/index.html <<EOF
 </body>
 </html>
 EOF
+# Ensure Log Directory Exists
+mkdir -p /var/log/nginx
+touch /var/log/nginx/access.log
+touch /var/log/nginx/error.log
+chown -R www-data:www-data /var/log/nginx
+
 # Nginx Config
 cat > /etc/nginx/sites-available/default <<EOF
 server {
