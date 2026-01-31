@@ -385,6 +385,10 @@ print_success "TLS Wrappers Active (Stunnel + ShadowTLS)"
 
 # 8. Firewall & Geofencing
 print_step "8/10" "Applying Advanced Firewall & Geofencing..."
+# Fetching IP Lists from your GitHub automatically
+fetch_script "ip2location_country_ir.netset"
+fetch_script "ip2location_country_ru.netset"
+fetch_script "ip2location_country_cn.netset"
 fetch_script "firewall_manager.sh"
 ./firewall_manager.sh > /dev/null 2>&1 &
 run_with_spinner $!
@@ -494,12 +498,12 @@ run_integrated_audit() {
         local site=$1; local ip=$2
         printf "%-30s" "[~] Testing $site..."
         # We check for exit code 28 (timeout) or 7 (failed to connect) - likely blocked
-        # Exit code 0 means site opened successfully (FAIL)
+        # Error 3/6 can happen if the firewall drops the packet before resolution finishes
         curl -m 4 -s -I --resolve "$site:80:$ip" "http://$site" > /dev/null 2>&1
         local ret=$?
         if [ $ret -eq 0 ]; then
             echo -e "${RED}[FAILED - SITE OPENED]${NC}"
-        elif [ $ret -eq 28 ] || [ $ret -eq 7 ]; then
+        elif [ $ret -eq 28 ] || [ $ret -eq 7 ] || [ $ret -eq 3 ] || [ $ret -eq 6 ]; then
             echo -e "${GREEN}[SUCCESS - BLOCKED]${NC}"
         else
             echo -e "${YELLOW}[?] UNKNOWN (ERROR $ret)${NC}"
