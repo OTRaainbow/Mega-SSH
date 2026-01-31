@@ -118,7 +118,15 @@ print_step "Applying Anti-Lockout Rules..."
 SERVER_IP=$(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v "127.0.0.1" | head -n 1)
 if [ -n "$SERVER_IP" ]; then
     echo -e "${YELLOW}[+] Excluding Server IP: ${SERVER_IP}${NC}"
+    # 1. WARP Exclusion (Tunnel Split)
     warp-cli --accept-tos tunnel ip add "$SERVER_IP" > /dev/null 2>&1
+    
+    # 2. Policy Routing (Force Direct Return Path)
+    # This is critical! It forces replies from the server's real IP to ignore WARP.
+    if ! ip rule show | grep -q "$SERVER_IP"; then
+        echo -e "${YELLOW}[+] Adding Policy Routing (Fixes SSH/Iran access)...${NC}"
+        ip rule add from "$SERVER_IP" lookup main prio 1000
+    fi
 fi
 
 # 2. Detect Current SSH Client IP (Backup access)
