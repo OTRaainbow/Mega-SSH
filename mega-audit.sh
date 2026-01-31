@@ -11,7 +11,8 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 LOG_FILE="/var/log/megassh_audit.log"
-exec > >(tee -a "$LOG_FILE") 2>&1
+# Removed complex exec redirect to prevent shell crashes
+echo "Audit started at $(date)" >> "$LOG_FILE"
 
 echo -e "${CYAN}=================================================${NC}"
 echo -e "${CYAN}        MEGASSH SYSTEM AUDIT (CHECK LOG)        ${NC}"

@@ -441,7 +441,7 @@ echo ""
 if [ -f "mega-audit.sh" ]; then
     echo -e "${YELLOW}[~] Starting Final System Validation...${NC}"
     chmod +x mega-audit.sh
-    ./mega-audit.sh
+    bash ./mega-audit.sh
 else
     echo -e "${RED}[!] Note: mega-audit.sh is missing. Skipping auto-check.${NC}"
     echo -e "\n${RED}[!] IMPORTANT: System changes require a reboot to be 100% effective.${NC}"
