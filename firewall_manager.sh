@@ -17,31 +17,36 @@ NC='\033[0m' # No Color
 apt update
 apt install -y ipset iptables-persistent ufw curl
 
-# 2. Populate IP Sets from Local CIDR Files
-echo -e "\033[1;33m[~] Populating IP Sets from Local Files...\033[0m"
+# 2. Populate IP Sets from IP2Location Netset Files
+echo -e "\033[1;33m[~] Populating IP Sets from IP2Location Files...\033[0m"
 
 # Create Iran Set (For Outbound Block)
 ipset -L country_block_out >/dev/null 2>&1 || ipset create country_block_out hash:net
 ipset flush country_block_out # Clear existing entries for fresh load
-if [ -f ir.cidr ]; then
-    while read line; do ipset -A country_block_out $line; done < ir.cidr
-    echo -e "${GREEN}[✔] Loaded Iran CIDRs (Outbound Block)${NC}"
+if [ -f ip2location_country_ir.netset ]; then
+    grep -v '^#' ip2location_country_ir.netset | while read line; do 
+        [ -n "$line" ] && ipset -A country_block_out $line
+    done
+    echo -e "${GREEN}[✔] Loaded IP2Location Iran (Outbound Block)${NC}"
 else
-    echo -e "${RED}[✘] Error: ir.cidr not found!${NC}"
+    echo -e "${RED}[✘] Error: ip2location_country_ir.netset not found!${NC}"
 fi
 
 # Create Russia/China Sets (For Inbound & Outbound Block)
 ipset -L country_block_in >/dev/null 2>&1 || ipset create country_block_in hash:net
 ipset flush country_block_in # Clear existing entries for fresh load
 for cc in ru cn; do
-    if [ -f $cc.cidr ]; then
-        while read line; do
-            ipset -A country_block_in $line
-            ipset -A country_block_out $line # Also block outbound to these countries
-        done < $cc.cidr
-        echo -e "${GREEN}[✔] Loaded $cc.cidr (Inbound/Outbound Block)${NC}"
+    FILE="ip2location_country_${cc}.netset"
+    if [ -f "$FILE" ]; then
+        grep -v '^#' "$FILE" | while read line; do
+            if [ -n "$line" ]; then
+                ipset -A country_block_in $line
+                ipset -A country_block_out $line # Also block outbound to these countries
+            fi
+        done
+        echo -e "${GREEN}[✔] Loaded $FILE (Inbound/Outbound Block)${NC}"
     else
-        echo -e "${RED}[✘] Error: $cc.cidr not found!${NC}"
+        echo -e "${RED}[✘] Error: $FILE not found!${NC}"
     fi
 done
 
