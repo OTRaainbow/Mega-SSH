@@ -34,7 +34,7 @@ print_banner() {
 
 # Spinner Function for long tasks
 run_with_spinner() {
-    local pid=$!
+    local pid=$1
     local delay=0.1
     local spinstr='|/-\'
     echo -n " "
@@ -121,7 +121,23 @@ export DEBIAN_FRONTEND=noninteractive
 # 1. Update & Install Dependencies
 print_step "1/10" "Updating System & Installing Dependencies..."
 (apt update && apt upgrade -y && apt install -y curl socat wget git cmake make gcc build-essential nginx haproxy ipset iptables-persistent ufw unzip tar cron) >> $LOG_FILE 2>&1 &
-run_with_spinner $!
+PID=$!
+run_with_spinner $PID
+wait $PID
+if [ $? -ne 0 ]; then
+    print_error "Dependency Installation Failed!"
+    echo -e "${YELLOW}Last 20 lines of log:${NC}"
+    tail -n 20 $LOG_FILE
+    echo -e "${RED}[!] Please fix the error above (e.g., release apt lock) and run again.${NC}"
+    exit 1
+fi
+
+# Double Check Dependencies
+if ! command -v nginx > /dev/null || ! command -v haproxy > /dev/null; then
+    print_error "Critical Dependencies (Nginx/HAProxy) missing!"
+    exit 1
+fi
+
 print_success "Dependencies Installed"
 
 # Set Root Password
@@ -145,18 +161,21 @@ print_success "UDPGW Service Started (Port $PORT_UDPGW)"
 print_step "4/10" "Hardening SSH (Split-Stream: Ports 2222-2225)..."
 
 # UBUNTU 24.04 FIX: Disable Socket Activation (Kills Port 22)
-print_step "4a" "Disabling ssh.socket (Fixing Port 22 Leak)..."
-systemctl stop ssh.socket
-systemctl disable ssh.socket
-systemctl mask ssh.socket
+# RESCUE MODE: We are KEEPING Port 22 enabled for now to prevent lockout.
+# You can manually disable it later once 443 is verified.
+# systemctl stop ssh.socket
+# systemctl disable ssh.socket
+# systemctl mask ssh.socket
 
 cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
 # Settings
-# Remove existing ports and add split-stream ports (LOCALHOST ONLY)
+# Remove existing ports and add split-stream ports
 sed -i "/^Port/d" /etc/ssh/sshd_config
 sed -i "/^ListenAddress/d" /etc/ssh/sshd_config
-# Bind ONLY to Localhost (Security: User wants ONLY 443 accessible)
-echo "ListenAddress 127.0.0.1" >> /etc/ssh/sshd_config
+
+# RESCUE: Port 22 Enabled
+echo "Port 22" >> /etc/ssh/sshd_config
+# Split-Stream Ports (Internal)
 echo "Port 2222" >> /etc/ssh/sshd_config
 echo "Port 2223" >> /etc/ssh/sshd_config
 echo "Port 2224" >> /etc/ssh/sshd_config
@@ -193,11 +212,13 @@ fi
 if ! grep -q "^MACs" /etc/ssh/sshd_config; then
     echo "MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com" >> /etc/ssh/sshd_config
 fi
-# Enable Standard Service (Since Socket is dead)
+# Enable Standard Service
 systemctl unmask ssh
 systemctl enable ssh
 systemctl restart ssh
-print_success "SSH Hardened & Split (Ports 2222-2225)"
+# Ensure Port 22 Firewall Rule
+ufw allow 22/tcp
+print_success "SSH Configured (Ports 22 + 2222-2225)"
 
 # 5. Nginx Decoy Site (Digikala)
 print_step "5/10" "Deploying Decoy Site (Digikala)..."
@@ -352,6 +373,7 @@ echo -e "${GREEN}       INSTALLATION COMPLETE SUCCESSFULLY        ${NC}"
 echo -e "${BLUE}=================================================${NC}"
 echo -e "${YELLOW}Connection Details:${NC}"
 echo -e "  • ${CYAN}Direct SSH:${NC}    YourIP:443"
+echo -e "  • ${RED}Rescue SSH:${NC}    YourIP:22 (Temp Enabled)"
 echo -e "  • ${CYAN}SSL Wrapped:${NC}   YourIP:8443 (via Stunnel)"
 echo -e "  • ${CYAN}User Protocol:${NC} ChaCha20-Poly1305"
 echo -e "  • ${CYAN}Decoy Site:${NC}    Digikala (https://YourIP/)"
