@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# Zero-Leak Firewall (Policy Routing & Blackhole Mode)
+# Zero-Leak Firewall (Policy Routing & Blackhole Mode - V2)
 # Bypasses tunnel encapsulation by blocking at the routing layer.
 # ==============================================================================
 
@@ -25,7 +25,7 @@ load_set() {
         echo -e "${YELLOW}[~] Loading $file into $target_set...${NC}"
         (
             echo "create $target_set hash:net maxelem 524288 -exist"
-            grep -v '^#' "$FILE" | tr -d '\r' | awk -v set="$target_set" 'NF {print "add " set " " $1}'
+            grep -v '^#' "$file" | tr -d '\r' | awk -v set="$target_set" 'NF {print "add " set " " $1}'
         ) | ipset restore -exist
     fi
 }
@@ -50,29 +50,37 @@ iptables -t raw -F
 # 3. IMPLEMENT ZERO-LEAK ROUTING (THE "HAMMER")
 echo -e "${YELLOW}[~] Configuring Policy Routing Blackhole...${NC}"
 
-# A. Create a Blackhole Routing Table (Table 100)
-# This table says "Destination Prohibited" to anything in it.
-ip route flush table 100 2>/dev/null
-ip route add unreachable default table 100
+# A. Create a Blackhole Routing Table (Table 200)
+# We use 'blackhole' as it is more compatible across Linux distros.
+ip route flush table 200 2>/dev/null
+ip route add blackhole default table 200
 
 # B. Add Policy Rule
-# Any packet marked with 0x99 MUST use Table 100 (and thus be prohibited)
+# Any packet marked with 0x99 MUST use Table 200
 ip rule del fwmark 0x99 2>/dev/null
-ip rule add fwmark 0x99 table 100 priority 100
+ip rule add fwmark 0x99 table 200 priority 100
 
 # C. Mark the Packets (Mangle Table)
-# We mark in PREROUTING (for clients) and OUTPUT (for server apps)
-# This happens BEFORE WARP/NPV can encapsulate the packet.
+# PREROUTING = VPN Clients | OUTPUT = Server Apps
 iptables -t mangle -I PREROUTING 1 -m set --match-set country_block_out dst -j MARK --set-mark 0x99
 iptables -t mangle -I OUTPUT 1 -m set --match-set country_block_out dst -j MARK --set-mark 0x99
 
+# D. Persist Routing Rule (Temporary approach for easy setup)
+# We add it to a simple script that runs on network start if possible
+cat > /usr/local/bin/megassh-routes.sh <<EOF
+#!/bin/bash
+ip route add blackhole default table 200 2>/dev/null
+ip rule add fwmark 0x99 table 200 priority 100 2>/dev/null
+EOF
+chmod +x /usr/local/bin/megassh-routes.sh
+
 # 4. TRADITIONAL FILTER DROPS (BACKUP LAYER)
+# We use REJECT here to give VPN clients an immediate "Connection Refused"
 iptables -I FORWARD 1 -m set --match-set country_block_out dst -j REJECT --reject-with icmp-port-unreachable
 iptables -I OUTPUT 1 -m set --match-set country_block_out dst -j REJECT --reject-with icmp-port-unreachable
 iptables -t raw -I PREROUTING 1 -m set --match-set country_block_in src -j DROP
 
 # 5. DNS HIJACK PREVENTION
-# Block DNS lookups if the target IP is in the blocklist
 iptables -I OUTPUT 1 -p udp --dport 53 -m set --match-set country_block_out dst -j DROP
 iptables -I FORWARD 1 -p udp --dport 53 -m set --match-set country_block_out dst -j DROP
 
@@ -93,9 +101,9 @@ mkdir -p /etc/iptables
 iptables-save > /etc/iptables/rules.v4
 netfilter-persistent save > /dev/null 2>&1
 
-echo -e "${GREEN}[✔] ZERO-LEAK POLICY ROUTING ACTIVE.${NC}"
+echo -e "${GREEN}[✔] ZERO-LEAK POLICY ROUTING (V2) ACTIVE.${NC}"
 echo -e "${CYAN}--------------------------------------------------${NC}"
 echo -e "Total IPSet Entries: $(ipset list | grep 'Number of entries' | awk '{sum+=$4} END {print sum}')"
-echo -e "Policy Rule: $(ip rule show | grep 0x99)"
-echo -e "Table 100:   $(ip route show table 100)"
+echo -e "Policy Rule 0x99:  $(ip rule show | grep 0x99)"
+echo -e "Table 200 Status:  $(ip route show table 200)"
 echo -e "${CYAN}--------------------------------------------------${NC}"

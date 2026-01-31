@@ -390,9 +390,8 @@ fetch_script "ip2location_country_ir.netset"
 fetch_script "ip2location_country_ru.netset"
 fetch_script "ip2location_country_cn.netset"
 fetch_script "firewall_manager.sh"
-./firewall_manager.sh > /dev/null 2>&1 &
-run_with_spinner $!
-print_success "Firewall Rules Applied (Silent Drop: CN/RU)"
+./firewall_manager.sh
+print_success "Firewall Rules Applied (Zero-Leak Mode Active)"
 
 # 9. Session Limiter (Global Compatibility)
 print_step "9/10" "Enforcing Session Limits (Compatible with useradd.py)..."
@@ -492,8 +491,8 @@ run_integrated_audit() {
     printf "%-30s" "[~] Zero-Leak Routing Rule..."
     if ip rule show | grep -q "0x99"; then echo -e "${GREEN}[ACTIVE]${NC}"; else echo -e "${RED}[MISSING]${NC}"; fi
 
-    printf "%-30s" "[~] Blackhole Table 100..."
-    if ip route show table 100 | grep -q "unreachable default"; then echo -e "${GREEN}[OK]${NC}"; else echo -e "${RED}[MISSING]${NC}"; fi
+    printf "%-30s" "[~] Blackhole Table 200..."
+    if ip route show table 200 2>/dev/null | grep -q "blackhole"; then echo -e "${GREEN}[OK]${NC}"; else echo -e "${RED}[MISSING]${NC}"; fi
 
     # Check IPv6
     printf "%-30s" "[~] IPv6 Status..."
