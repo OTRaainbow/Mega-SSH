@@ -142,12 +142,20 @@ run_with_spinner $!
 print_success "UDPGW Service Started (Port $PORT_UDPGW)"
 
 # 4. SSH Security Configuration (Hybrid Multiplexing)
-# ... (Continuing SSH Logic - No changes needed here, internal config)
 print_step "4/10" "Hardening SSH (Split-Stream: Ports 2222-2225)..."
+
+# UBUNTU 24.04 FIX: Disable Socket Activation (Kills Port 22)
+print_step "4a" "Disabling ssh.socket (Fixing Port 22 Leak)..."
+systemctl stop ssh.socket
+systemctl disable ssh.socket
+systemctl mask ssh.socket
+
 cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
 # Settings
-# Remove existing ports and add split-stream ports
+# Remove existing ports and add split-stream ports (0.0.0.0 for Direct Access)
 sed -i "/^Port/d" /etc/ssh/sshd_config
+sed -i "/^ListenAddress/d" /etc/ssh/sshd_config
+# Note: No ListenAddress = 0.0.0.0 (Open to World)
 echo "Port 2222" >> /etc/ssh/sshd_config
 echo "Port 2223" >> /etc/ssh/sshd_config
 echo "Port 2224" >> /etc/ssh/sshd_config
@@ -184,11 +192,14 @@ fi
 if ! grep -q "^MACs" /etc/ssh/sshd_config; then
     echo "MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com" >> /etc/ssh/sshd_config
 fi
+# Enable Standard Service (Since Socket is dead)
+systemctl unmask ssh
+systemctl enable ssh
 systemctl restart ssh
 print_success "SSH Hardened & Split (Ports 2222-2225)"
 
-# 5. Nginx Decoy Site
-print_step "5/10" "Deploying Decoy Site (Rubika)..."
+# 5. Nginx Decoy Site (Digikala)
+print_step "5/10" "Deploying Decoy Site (Digikala)..."
 systemctl stop nginx
 rm -rf /usr/share/nginx/html/*
 cat > /usr/share/nginx/html/index.html <<EOF
@@ -197,19 +208,24 @@ cat > /usr/share/nginx/html/index.html <<EOF
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rubika | Super App</title>
+    <title>فروشگاه اینترنتی دیجی‌کالا</title>
     <style>
-        body { font-family: Tahoma, sans-serif; background-color: #f5f5f5; text-align: center; padding: 50px; }
-        .logo { width: 100px; height: 100px; background-color: #7033ff; border-radius: 20px; margin: 0 auto; line-height: 100px; color: white; font-size: 50px; }
-        h1 { color: #333; }
-        p { color: #666; }
+        body { font-family: 'IranYekan', Tahoma, sans-serif; background-color: #f0f0f1; text-align: center; padding-top: 100px; margin: 0; }
+        .container { background: white; width: 90%; max-width: 600px; margin: 0 auto; padding: 40px; border-radius: 8px; box-shadow: 0 1px 5px rgba(0,0,0,0.1); }
+        .logo { color: #ef394e; font-size: 40px; font-weight: bold; margin-bottom: 20px; }
+        h1 { color: #424750; font-size: 18px; margin-bottom: 10px; }
+        p { color: #81858b; font-size: 14px; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #ef394e; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <div class="logo">R</div>
-    <h1>Rubika Web Version</h1>
-    <p>Please use the mobile application for better experience.</p>
-    <p>در حال بارگذاری سرویس ها...</p>
+    <div class="container">
+        <div class="logo">digikala</div>
+        <h1>در حال بارگذاری...</h1>
+        <p>لطفاً شکیبا باشید، در حال اتصال به سرورهای دیجی‌کالا هستیم.</p>
+        <div class="loader"></div>
+    </div>
 </body>
 </html>
 EOF
@@ -222,9 +238,9 @@ server {
     index index.html;
     location / {
         try_files \$uri \$uri/ =404;
-        add_header Host "rubika.ir";
-        add_header Server "ArvanCloud";
-        add_header X-Powered-By "ASP.NET";
+        add_header Host "digikala.com";
+        add_header Server "Digikala-Cdn";
+        add_header X-Powered-By "PHP/8.1";
     }
     # Disk I/O Optimization
     access_log off;
@@ -232,10 +248,10 @@ server {
 }
 EOF
 systemctl restart nginx > /dev/null 2>&1
-print_success "Nginx Decoy Live (Port $PORT_NGINX)"
+print_success "Nginx Decoy Live (Digikala - Port $PORT_NGINX)"
 
-# 6. HAProxy Multiplexing
-print_step "6/10" "Configuring HAProxy Split-Stream (Port 443 -> 4 Cores)..."
+# 6. HAProxy Multiplexing (SSH Priority)
+print_step "6/10" "Configuring HAProxy Split-Stream (Port 443 -> SSH Default)..."
 cat > /etc/haproxy/haproxy.cfg <<EOF
 global
     log /dev/log local0
@@ -264,11 +280,15 @@ frontend multiplexer_443
     bind *:${PORT_HAPROXY}
     mode tcp
     tcp-request inspect-delay 5s
-    # Detect SSH Protocol
-    acl is_ssh payload(0,3) -m str SSH
-    # Routing Logic
-    use_backend ssh_backend if is_ssh
-    default_backend web_decoy_backend
+    # Detect Obvious HTTP/TLS (Decoy Candidate)
+    acl is_http req.payload(0,3) -m str GET POST HEAD OPTIONS
+    acl is_tls req.ssl_hello_type gt 0
+    
+    # Routing Logic: If it looks like HTTP or TLS, send to Decoy. Else assume SSH.
+    use_backend web_decoy_backend if is_http
+    use_backend web_decoy_backend if is_tls
+    default_backend ssh_backend
+
 backend ssh_backend
     mode tcp
     balance roundrobin
@@ -282,7 +302,7 @@ backend web_decoy_backend
 EOF
 sed -i 's/send-proxy-v2//g' /etc/haproxy/haproxy.cfg
 systemctl restart haproxy > /dev/null 2>&1
-print_success "HAProxy Split-Stream Active (Port 443 -> 4x SSH)"
+print_success "HAProxy Split-Stream Active (Port 443 -> SSH Priority)"
 
 # 7. Stunnel (SSL Wrapping)
 print_step "7/10" "Initializing Stunnel (Port 8443) & ShadowTLS (Port 9443)..."
