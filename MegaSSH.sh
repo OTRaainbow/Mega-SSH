@@ -27,7 +27,7 @@ print_banner() {
     echo "         High-Security VPN Installer             "
     echo -e "${NC}"
     echo -e "${BLUE}=================================================${NC}"
-    echo -e "${YELLOW}  Target OS: Ubuntu 24.04 | Features: 7-Point Security${NC}"
+    echo -e "${YELLOW}  Target OS: Ubuntu 24.04 | Version: 3.0.4 (Ultra-Sync)${NC}"
     echo -e "${BLUE}=================================================${NC}"
     echo ""
 }
@@ -489,13 +489,19 @@ run_integrated_audit() {
     RU_CN_COUNT=$(ipset list country_block_in 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
     
     printf "%-30s" "[~] IPSet (Iran Block)..."
-    if [ -n "$IR_COUNT" ] && [ "$IR_COUNT" -gt 0 ]; then echo -e "${GREEN}[OK] ($IR_COUNT entries)${NC}"; else echo -e "${RED}[EMPTY]${NC}"; fi
+    if [ -n "$IR_COUNT" ] && [ "$IR_COUNT" -gt 0 ]; then 
+        echo -e "${GREEN}[OK] ($IR_COUNT entries)${NC}"
+    else 
+        echo -e "${RED}[EMPTY]${NC}"
+        echo -e "    ${YELLOW}(Checking IP Samples...)${NC}"
+        ipset list country_block_out 2>/dev/null | head -n 5
+    fi
     
     printf "%-30s" "[~] IPSet (RU/CN Block)..."
     if [ -n "$RU_CN_COUNT" ] && [ "$RU_CN_COUNT" -gt 0 ]; then echo -e "${GREEN}[OK] ($RU_CN_COUNT entries)${NC}"; else echo -e "${RED}[EMPTY]${NC}"; fi
     
-    # Check Policy Routing (FWMark)
-    printf "%-30s" "[~] Zero-Leak Routing Rule..."
+    # Check Policy Routing (FWMark 0x99 -> Table 200)
+    printf "%-30s" "[~] Zero-Leak Routing (Rule 0x99)..."
     if ip rule show | grep -q "0x99"; then echo -e "${GREEN}[ACTIVE]${NC}"; else echo -e "${RED}[MISSING]${NC}"; fi
 
     printf "%-30s" "[~] Blackhole Table 200..."
