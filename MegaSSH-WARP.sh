@@ -66,25 +66,64 @@ print_success "Base Setup Complete"
 
 # 2. Install Cloudflare WARP
 print_step "2/4" "Installing Cloudflare WARP..."
-(
-    rm -f /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-    curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-    VERSION_CODENAME=$(lsb_release -cs)
-    [ "$VERSION_CODENAME" == "" ] && VERSION_CODENAME="noble"
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $VERSION_CODENAME main" | tee /etc/apt/sources.list.d/cloudflare-client.list
-    apt update && apt install -y cloudflare-warp
-) > /dev/null 2>&1
-print_success "WARP Installed"
+rm -f /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+VERSION_CODENAME=$(lsb_release -cs)
+[ "$VERSION_CODENAME" == "" ] && VERSION_CODENAME="noble"
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $VERSION_CODENAME main" | tee /etc/apt/sources.list.d/cloudflare-client.list
+apt update && apt install -y cloudflare-warp
+
+# Ensure Service is Running
+print_step "Checking WARP Service..."
+# Force Cleanup of Stale Sockets/Processes
+systemctl stop warp-svc > /dev/null 2>&1
+killall warp-svc > /dev/null 2>&1
+rm -rf /run/cloudflare-warp > /dev/null 2>&1
+
+systemctl enable warp-svc
+systemctl restart warp-svc
+sleep 5
+if ! systemctl is-active --quiet warp-svc; then
+    print_error "WARP Service (warp-svc) failed to start!"
+    systemctl status warp-svc --no-pager
+    exit 1
+fi
+print_success "WARP Service Active"
 
 # 3. Register and Configure
 print_step "3/4" "Registering WARP Account..."
-warp-cli --accept-tos register > /dev/null 2>&1
+# Reset state if re-running
+warp-cli --accept-tos disconnect > /dev/null 2>&1
+warp-cli --accept-tos delete > /dev/null 2>&1
+
+# Register with verbose output
+if ! warp-cli --accept-tos register; then
+    print_error "Registration Failed! Retrying with clean state..."
+    rm -rf /var/lib/cloudflare-warp/*
+    systemctl restart warp-svc
+    sleep 3
+    warp-cli --accept-tos register
+fi
 print_success "Account Registered"
 
 print_step "4/4" "Configuring WARP Mode (Global Routing)..."
-warp-cli --accept-tos set-mode warp > /dev/null 2>&1
-warp-cli --accept-tos connect > /dev/null 2>&1
-sleep 5
+warp-cli --accept-tos set-mode warp
+echo -e "${YELLOW}[~] Connecting to WARP (This may take a moment)...${NC}"
+warp-cli --accept-tos connect
+
+# Wait for connection
+MAX_RETRIES=10
+COUNT=0
+while [ $COUNT -lt $MAX_RETRIES ]; do
+    STATUS=$(warp-cli --accept-tos status | grep "Status")
+    if [[ "$STATUS" == *"Connected"* ]]; then
+        break
+    fi
+    echo -n "."
+    sleep 2
+    COUNT=$((COUNT+1))
+done
+echo ""
 
 # Verification
 print_step "Verifying WARP Connection..."
@@ -102,8 +141,8 @@ if [ -n "$IS_WARP" ]; then
     echo -e "  • ${GREEN}WARP Status:${NC}   ACTIVE (System-wide)"
     echo -e "  • ${CYAN}Public IP:${NC}     $WARP_IP (Protected)"
 else
-    echo -e "  • ${RED}WARP Status:${NC}   CONNECTED BUT NOT VERIFIED"
-    echo -e "  • ${YELLOW}Note:${NC}          Please check 'warp-cli status' manually."
+    echo -e "  • ${RED}WARP Status:${NC}   CONNECTION FAILED"
+    echo -e "  • ${YELLOW}Debug:${NC}         Check 'journalctl -u warp-svc'"
 fi
 echo -e "  • ${CYAN}Usage:${NC}       All server traffic is now routed through Cloudflare."
 echo ""
