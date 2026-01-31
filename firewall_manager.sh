@@ -50,6 +50,7 @@ ufw allow ${PORT_UDPGW}/tcp    # 7301
 ufw allow ${PORT_UDPGW}/udp    # 7301
 ufw allow 8443/tcp             # Stunnel (SSL SSH)
 ufw allow 9443/tcp             # ShadowTLS (Advanced)
+ufw allow 22/tcp               # Rescue SSH (CRITICAL)
 # ufw allow 2222:2225/tcp    # (Disabled: Only Port 443 External)
 
 # --- GEO-LOCKING (IRAN ONLY) ---
@@ -64,9 +65,11 @@ iptables -t raw -A PREROUTING -m state --state RELATED,ESTABLISHED -j ACCEPT
 
 # SAFETY CHECK: Only apply DROP if the Whitelist is populated
 if ipset list country_allow_in | grep -q "Number of entries: [1-9]"; then
-    echo -e "\033[1;32m[+] Geo-Whitelist populated. Enabling Paranoid Mode.\033[0m"
-    # Drop if NOT in Iran IP Set (Ingress)
-    iptables -t raw -A PREROUTING -m set ! --match-set country_allow_in src -j DROP
+    echo -e "\033[1;32m[+] Geo-Whitelist populated.\033[0m"
+    echo -e "\033[1;31m[!] WARNING: Paranoid Mode (Drop Non-Iran) is DISABLED by default to prevent lockout.\033[0m"
+    echo -e "\033[1;33m    Uncomment the DROP line in firewall_manager.sh to enable it.\033[0m"
+    # Drop if NOT in Iran IP Set (Ingress) - DISABLED BY DEFAULT
+    # iptables -t raw -A PREROUTING -m set ! --match-set country_allow_in src -j DROP
 else
     echo -e "\033[1;31m[!] WARNING: Geo-Whitelist is EMPTY. Skipping Drop Rule to prevent Lockout.\033[0m"
 fi

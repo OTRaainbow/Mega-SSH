@@ -120,8 +120,8 @@ export DEBIAN_FRONTEND=noninteractive
 
 # 1. Update & Install Dependencies
 print_step "1/10" "Updating System & Installing Dependencies..."
-# PRE-INSTALL FIX: Purge UFW first to allow iptables-persistent
-apt purge -y ufw >> $LOG_FILE 2>&1
+# PRE-INSTALL FIX: Purge UFW first to allow iptables-persistent (DISABLED: Needed for Firewall Manager)
+# apt purge -y ufw >> $LOG_FILE 2>&1
 apt autoremove -y >> $LOG_FILE 2>&1
 
 # Dependencies (REMOVED ufw)
@@ -221,8 +221,8 @@ fi
 systemctl unmask ssh
 systemctl enable ssh
 systemctl restart ssh
-# Ensure Port 22 Firewall Rule
-ufw allow 22/tcp
+# Ensure Port 22 Firewall Rule (Handled in firewall_manager.sh)
+# ufw allow 22/tcp
 print_success "SSH Configured (Ports 22 + 2222-2225)"
 
 # 5. Nginx Decoy Site (Digikala)
