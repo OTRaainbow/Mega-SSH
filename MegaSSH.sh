@@ -64,6 +64,30 @@ print_error() {
     echo -e "${RED}[✘] $1${NC}"
 }
 
+# Health Check Function
+check_service_health() {
+    local service=$1
+    local port=$2
+    echo -n "  [~] Verifying $service health on port $port..."
+    sleep 2 # Give it a moment to bind
+    
+    if ! systemctl is-active --quiet "$service"; then
+        echo -e "\n${RED}[✘] CRITICAL: $service service failed to start!${NC}"
+        echo -e "${YELLOW}--- Last 15 lines of $service logs ---${NC}"
+        journalctl -u "$service" --no-pager -n 15
+        echo -e "${RED}[!] Installation aborted. Please fix the error above.${NC}"
+        exit 1
+    fi
+
+    if ! ss -tlnp | grep -q ":$port "; then
+        echo -e "\n${RED}[✘] CRITICAL: $service is running but NOT listening on port $port!${NC}"
+        echo -e "${YELLOW}Current listening ports:${NC}"
+        ss -tlnp | grep LISTEN | head -n 10
+        exit 1
+    fi
+    echo -e " ${GREEN}OK${NC}"
+}
+
 # --- Initialization ---
 print_banner
 echo "Installation started at $(date)" >> $LOG_FILE
@@ -167,16 +191,17 @@ print_step "4/10" "Hardening SSH (Split-Stream: Ports 2222-2225)..."
 
 # UBUNTU 24.04 FIX: Disable Socket Activation (Kills Port 22)
 # RESCUE MODE: We are KEEPING Port 22 enabled for now to prevent lockout.
-# You can manually disable it later once 443 is verified.
-# systemctl stop ssh.socket
-# systemctl disable ssh.socket
-# systemctl mask ssh.socket
+systemctl stop ssh.socket
+systemctl disable ssh.socket
+systemctl mask ssh.socket
 
 cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
 # Settings
 # Remove existing ports and add split-stream ports
 sed -i "/^Port/d" /etc/ssh/sshd_config
 sed -i "/^ListenAddress/d" /etc/ssh/sshd_config
+# Force IPv4 Binding to ensure HAProxy (127.0.0.1) can connect
+echo "ListenAddress 0.0.0.0" >> /etc/ssh/sshd_config
 
 # RESCUE: Port 22 Enabled
 echo "Port 22" >> /etc/ssh/sshd_config
@@ -221,9 +246,10 @@ fi
 systemctl unmask ssh
 systemctl enable ssh
 systemctl restart ssh
-# Ensure Port 22 Firewall Rule (Handled in firewall_manager.sh)
-# ufw allow 22/tcp
-print_success "SSH Configured (Ports 22 + 2222-2225)"
+# Verify SSH
+check_service_health "ssh" "22"
+check_service_health "ssh" "2222"
+print_success "SSH Configured & Verified (Ports 22 + 2222-2225)"
 
 # 5. Nginx Decoy Site (Digikala)
 print_step "5/10" "Deploying Decoy Site (Digikala)..."
@@ -275,7 +301,9 @@ server {
 }
 EOF
 systemctl restart nginx > /dev/null 2>&1
-print_success "Nginx Decoy Live (Digikala - Port $PORT_NGINX)"
+# Verify Nginx
+check_service_health "nginx" "$PORT_NGINX"
+print_success "Nginx Decoy Live (Port $PORT_NGINX)"
 
 # 6. HAProxy Multiplexing (SSH Priority)
 print_step "6/10" "Configuring HAProxy Split-Stream (Port 443 -> SSH Default)..."
