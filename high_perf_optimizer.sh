@@ -68,19 +68,32 @@ fi
 print_info "Detected Primary Interface: ${IFACE}"
 
 # --- Step 1: XanMod Kernel Installation (LTS/Stable) ---
+# --- Step 1: XanMod Kernel Installation (LTS/Stable) ---
 print_step "1/5" "Checking/Installing XanMod Kernel..."
+
+# Ensure prerequisites are installed
+DEBIAN_FRONTEND=noninteractive apt-get update -y >/dev/null 2>&1
+DEBIAN_FRONTEND=noninteractive apt-get install -y wget gpg irqbalance >/dev/null 2>&1
+
 if grep -q "xanmod" /etc/apt/sources.list.d/xanmod-release.list 2>/dev/null; then
      echo -e "${GREEN}[✔] XanMod repository already exists.${NC}"
 else
     print_info "Registering XanMod Repository..."
-    wget -qO - https://dl.xanmod.org/archive.key | gpg --dearmor -o /usr/share/keyrings/xanmod-archive-keyring.gpg
-    echo 'deb [signed-by=/usr/share/keyrings/xanmod-archive-keyring.gpg] http://deb.xanmod.org releases main' | tee /etc/apt/sources.list.d/xanmod-release.list
+    mkdir -p /etc/apt/keyrings
+    wget -qO - https://dl.xanmod.org/archive.key | gpg --dearmor -o /etc/apt/keyrings/xanmod-archive-keyring.gpg
+    
+    if [ -f "/etc/apt/keyrings/xanmod-archive-keyring.gpg" ]; then
+        echo 'deb [signed-by=/etc/apt/keyrings/xanmod-archive-keyring.gpg] http://deb.xanmod.org releases main' | tee /etc/apt/sources.list.d/xanmod-release.list
+        print_success "XanMod GPG Key & Repo Registered."
+    else
+        print_error "Failed to fetch XanMod GPG Key."
+    fi
 fi
 
 print_info "Updating apt and installing linux-xanmod-x64v3..."
 # Use non-interactive mode to avoid prompts
 DEBIAN_FRONTEND=noninteractive apt-get update -y >/dev/null 2>&1
-DEBIAN_FRONTEND=noninteractive apt-get install -y linux-xanmod-x64v3 irqbalance >/dev/null 2>&1
+DEBIAN_FRONTEND=noninteractive apt-get install -y linux-xanmod-x64v3 >/dev/null 2>&1
 if [ $? -ne 0 ]; then
     print_error "XanMod Kernel installation failed. Check internet connection or repo status."
     # Continue anyway to apply other optimizations
