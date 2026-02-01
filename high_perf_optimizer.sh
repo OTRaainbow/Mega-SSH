@@ -80,13 +80,25 @@ if grep -q "xanmod" /etc/apt/sources.list.d/xanmod-release.list 2>/dev/null; the
 else
     print_info "Registering XanMod Repository..."
     mkdir -p /etc/apt/keyrings
-    wget -qO - https://dl.xanmod.org/archive.key | gpg --dearmor -o /etc/apt/keyrings/xanmod-archive-keyring.gpg
+    rm -f /etc/apt/keyrings/xanmod-archive-keyring.gpg
     
-    if [ -f "/etc/apt/keyrings/xanmod-archive-keyring.gpg" ]; then
-        echo 'deb [signed-by=/etc/apt/keyrings/xanmod-archive-keyring.gpg] http://deb.xanmod.org releases main' | tee /etc/apt/sources.list.d/xanmod-release.list
-        print_success "XanMod GPG Key & Repo Registered."
+    # Download header to temp file to verify success
+    wget -q -O /tmp/xanmod.key https://dl.xanmod.org/archive.key
+    
+    if [ -s "/tmp/xanmod.key" ]; then
+        # Check if it looks like a key (simple check) or just let gpg handle it
+        gpg --dearmor -o /etc/apt/keyrings/xanmod-archive-keyring.gpg /tmp/xanmod.key 2>/dev/null
+        
+        if [ -s "/etc/apt/keyrings/xanmod-archive-keyring.gpg" ]; then
+            echo 'deb [signed-by=/etc/apt/keyrings/xanmod-archive-keyring.gpg] http://deb.xanmod.org releases main' | tee /etc/apt/sources.list.d/xanmod-release.list
+            print_success "XanMod GPG Key & Repo Registered."
+        else
+            print_error "Invalid GPG Key downloaded (gpg failed to dearmor)."
+            cat /tmp/xanmod.key | head -n 5 # Show what we got (might be HTML error)
+        fi
+        rm -f /tmp/xanmod.key
     else
-        print_error "Failed to fetch XanMod GPG Key."
+        print_error "Failed to download XanMod GPG Key (Connection failed or empty file)."
     fi
 fi
 
