@@ -154,8 +154,9 @@ if [ $? -ne 0 ]; then
 fi
 
 # Double Check Dependencies
-if ! command -v nginx > /dev/null || ! command -v haproxy > /dev/null; then
-    print_error "Critical Dependencies (Nginx/HAProxy) missing!"
+# Double Check Dependencies
+if ! command -v nginx > /dev/null; then
+    print_error "Critical Dependencies (Nginx) missing!"
     exit 1
 fi
 
@@ -201,6 +202,11 @@ EOF
     cd /root
 else
     print_success "HAProxy 3.3.2 already installed"
+fi
+
+if ! command -v haproxy > /dev/null; then
+    print_error "HAProxy Compilation Failed! Application not found."
+    exit 1
 fi
 
 # Set Root Password
