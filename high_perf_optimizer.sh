@@ -188,6 +188,7 @@ fi
 
 # --- Step 3: High-Standard Kernel Tuning (sysctl) ---
 print_step "3/5" "Applying Advanced Kernel Tuning..."
+cat > /etc/sysctl.d/99-ssh-direct.conf <<EOF
 # MegaSSH Stable Tuning (optimized for VPS)
 # --- General System ---
 fs.file-max = 1000000
@@ -230,6 +231,7 @@ net.ipv4.tcp_max_orphans = 262144
 net.ipv6.conf.all.disable_ipv6 = 1
 net.ipv6.conf.default.disable_ipv6 = 1
 net.ipv6.conf.lo.disable_ipv6 = 1
+EOF
 
 sysctl --system > /dev/null
 print_success "Kernel parameters applied."

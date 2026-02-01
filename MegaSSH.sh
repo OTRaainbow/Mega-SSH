@@ -349,8 +349,11 @@ print_step "4.1" "Applying EagleNet High-Volume Tuning..."
 mkdir -p /etc/ssh/sshd_config.d
 cat <<EOF > /etc/ssh/sshd_config.d/99-eaglenet.conf
 # EagleNet + MegaSSH Final Sync Tuning
-# Move internal SSH to 2222 (HAProxy will face the internet on 443)
+# Port 2222 (Primary), 2223, 2224, 2225 (Load Balanced Backends)
 Port 2222
+Port 2223
+Port 2224
+Port 2225
 UseDNS no
 TCPKeepAlive yes
 
@@ -476,8 +479,8 @@ frontend stats
 frontend multiplexer_443
     bind *:${PORT_HAPROXY}
     mode tcp
-    # 2s Delay: Balanced for performance and inspection
-    tcp-request inspect-delay 2s
+    # 1s Delay: Fast response for SSH clients
+    tcp-request inspect-delay 1s
     
     # ACLs for Traffic Identification
     # Match SSL/TLS ClientHello (ContentType 22 / 0x16)

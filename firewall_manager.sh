@@ -166,9 +166,7 @@ iptables -A INPUT -m conntrack --ctstate INVALID -j REJECT --reject-with tcp-res
 iptables -t mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1300
 iptables -t mangle -A OUTPUT -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1300
 iptables -A INPUT -p tcp --dport 22 -j ACCEPT
-iptables -A INPUT -p tcp --dport 80 -j ACCEPT
 iptables -A INPUT -p tcp --dport 443 -j ACCEPT
-iptables -A INPUT -p tcp --dport 2222 -j ACCEPT
 iptables -P INPUT DROP
 
 # conntrack rate limiting for port 443 (EagleNet logic)
