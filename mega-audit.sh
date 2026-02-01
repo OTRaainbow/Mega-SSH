@@ -171,11 +171,9 @@ echo -e "${BCYAN}Testing strict outbound blocking (Should FAIL to connect)${NC}"
 test_block() {
     local site=$1
     local name=$2
-    # Resolve typically handled by curl, but we can rely on standard DNS behavior here or force if we had IPs.
-    # Using domain names to replicate user behavior.
     printf "%-40s" "[~] Testing $name ($site)..."
     
-    # Timeout 3s. If it connects (0), we failed. If it times out (28) or can't connect (7), we succeeded.
+    # Timeout 3s. Expect FAILURE.
     curl -m 3 -s -I "http://$site" > /dev/null 2>&1
     local ret=$?
     
@@ -184,30 +182,50 @@ test_block() {
         GLOBAL_FAIL=1
         echo "GeoBlock Failed: $site was accessible" >> "$LOG_FILE"
     else
-        echo -e "${GREEN}[BLOCKED] (Code: $ret)${NC}"
+        echo -e "${GREEN}[BLOCKED] (Success)${NC}"
     fi
 }
 
-echo -e "\n${BBLUE}>> Block Russia (RU)${NC}"
+test_open() {
+    local site=$1
+    local name=$2
+    printf "%-40s" "[~] Testing $name ($site)..."
+    
+    # Timeout 3s. Expect SUCCESS.
+    curl -m 3 -s -I "http://$site" > /dev/null 2>&1
+    local ret=$?
+    
+    if [ $ret -eq 0 ]; then
+        echo -e "${GREEN}[OPEN] (Success)${NC}"
+    else
+        echo -e "${RED}[FAILED - BLOCKED] (Code: $ret)${NC}"
+        GLOBAL_FAIL=1
+        echo "Access Failed: $site was unreachable" >> "$LOG_FILE"
+    fi
+}
+
+echo -e "\n${BBLUE}>> Verify BLOCKED Sites (RU/CN)${NC}"
+echo -e "${BCYAN}Target: Russia (Should be BLOCKED)${NC}"
 test_block "vk.com" "VKontakte"
 test_block "mail.ru" "Mail.ru"
 test_block "yandex.ru" "Yandex"
 test_block "ok.ru" "Odnoklassniki"
 test_block "gosuslugi.ru" "Gosuslugi"
 
-echo -e "\n${BBLUE}>> Block China (CN)${NC}"
+echo -e "\n${BCYAN}Target: China (Should be BLOCKED)${NC}"
 test_block "baidu.com" "Baidu"
 test_block "qq.com" "QQ"
 test_block "taobao.com" "Taobao"
 test_block "weibo.com" "Weibo"
 test_block "360.cn" "360 Security"
 
-echo -e "\n${BBLUE}>> Block Iran (IR)${NC}"
-test_block "digikala.com" "Digikala"
-test_block "varzesh3.com" "Varzesh3"
-test_block "aparat.com" "Aparat"
-test_block "shaparak.ir" "Shaparak"
-test_block "divar.ir" "Divar"
+echo -e "\n${BBLUE}>> Verify OPEN Sites (Iran)${NC}"
+echo -e "${BCYAN}Target: Iran (Should be OPEN)${NC}"
+test_open "digikala.com" "Digikala"
+test_open "varzesh3.com" "Varzesh3"
+test_open "aparat.com" "Aparat"
+test_open "shaparak.ir" "Shaparak"
+test_open "divar.ir" "Divar"
 
 # --- 6. Final Verdict ---
 echo -e "\n${BBLUE}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"

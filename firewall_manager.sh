@@ -98,9 +98,12 @@ iptables -t raw -F
 for cc in ru cn; do
     FILE="ip2location_country_${cc}.netset"
     load_set_nuclear "$cc" "$FILE" "country_block_in"
+    load_set_nuclear "$cc" "$FILE" "country_block_out"
 done
-# Iran handling moved entirely to strict_block.sh for outbound.
-# If you need Inbound IR block, add 'ir' to the loop above.
+# IRAN (IR) - Safe List
+# We do NOT load IR into country_block_out because we want it OPEN.
+# If you want to block inbound IR, uncomment below:
+# load_set_nuclear "ir" "ip2location_country_ir.netset" "country_block_in"
 
 # 2.5 LOAD CUSTOM USER RULES (ufw-user-*)
 if [ -f "user.rules" ]; then
@@ -135,6 +138,11 @@ ip rule add fwmark 0x99 table 200 priority 2
 # 4. MULTILAYER ENFORCEMENT
 # Optimization: Mark only in PREROUTING (inbound) and OUTPUT (outbound generated on box)
 # This covers all traffic with minimal overhead.
+
+# IMMEDIATE DROP FOR OUTBOUND BLOCKED COUNTRIES (RU/CN)
+iptables -I OUTPUT 1 -m set --match-set country_block_out dst -j DROP
+iptables -I FORWARD 1 -m set --match-set country_block_out dst -j DROP
+
 iptables -t mangle -I PREROUTING 1 -m set --match-set country_block_out dst -j MARK --set-mark 0x99
 iptables -t mangle -I OUTPUT 1 -m set --match-set country_block_out dst -j MARK --set-mark 0x99
 

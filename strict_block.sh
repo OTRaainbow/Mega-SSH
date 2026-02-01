@@ -80,7 +80,6 @@ load_set() {
 # 3. Load Data into Temporary Set
 load_set "$RULES_DIR/cn.netset" "country_block_out_tmp"
 load_set "$RULES_DIR/ru.netset" "country_block_out_tmp"
-load_set "$RULES_DIR/ir.netset" "country_block_out_tmp"
 
 # 4. Atomic Swap (Apply new rules instantly)
 print_step "3/4" "Swapping sets..."

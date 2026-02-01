@@ -217,6 +217,7 @@ RuntimeDirectoryMode=0755
 WantedBy=multi-user.target
 EOF
     systemctl daemon-reload
+    systemctl enable haproxy
     mkdir -p /etc/haproxy
     # /var/lib/haproxy is handled by chroot
     mkdir -p /var/lib/haproxy
