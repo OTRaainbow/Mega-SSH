@@ -140,7 +140,8 @@ fetch_script() {
 export DEBIAN_FRONTEND=noninteractive
 
 # Dependencies (REMOVED ufw)
-(apt update && apt upgrade -y && apt install -y software-properties-common && add-apt-repository ppa:vbernat/haproxy-3.4 -y && apt update && apt install -y curl socat wget git cmake make gcc build-essential nginx haproxy ipset iptables-persistent unzip tar cron) >> $LOG_FILE 2>&1 &
+# Dependencies (Source Compile Prep)
+(apt update && apt upgrade -y && apt install -y curl socat wget git cmake make gcc build-essential nginx ipset iptables-persistent unzip tar cron libssl-dev libpcre2-dev zlib1g-dev liblua5.3-dev) >> $LOG_FILE 2>&1 &
 PID=$!
 run_with_spinner $PID
 wait $PID
@@ -159,6 +160,48 @@ if ! command -v nginx > /dev/null || ! command -v haproxy > /dev/null; then
 fi
 
 print_success "Dependencies Installed"
+
+print_success "Dependencies Installed"
+ 
+# HAProxy 3.3.2 Source Compilation
+print_step "1.5" "Compiling HAProxy 3.3.2 (High Performance)..."
+if ! command -v haproxy >/dev/null || [[ $(haproxy -v | awk '{print $3}') != "3.3.2" ]]; then
+    cd /usr/src
+    wget -q https://www.haproxy.org/download/3.3/src/haproxy-3.3.2.tar.gz
+    tar xzf haproxy-3.3.2.tar.gz
+    cd haproxy-3.3.2
+    make TARGET=linux-glibc USE_OPENSSL=1 USE_PCRE2=1 USE_ZLIB=1 USE_LUA=1 >> $LOG_FILE 2>&1
+    make install >> $LOG_FILE 2>&1
+    
+    # Create Systemd Service
+    cat > /etc/systemd/system/haproxy.service <<EOF
+[Unit]
+Description=HAProxy Load Balancer
+Documentation=man:haproxy(1)
+After=network.target rsyslog.service
+
+[Service]
+Environment="CONFIG=/etc/haproxy/haproxy.cfg" "PIDFILE=/run/haproxy.pid"
+ExecStartPre=/usr/local/sbin/haproxy -f \$CONFIG -c -q
+ExecStart=/usr/local/sbin/haproxy -Ws -f \$CONFIG -p \$PIDFILE
+ExecReload=/usr/local/sbin/haproxy -f \$CONFIG -c -q
+ExecReload=/bin/kill -USR2 \$MAINPID
+KillMode=mixed
+Restart=always
+Type=notify
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    mkdir -p /etc/haproxy
+    mkdir -p /var/lib/haproxy
+    useradd -r haproxy 2>/dev/null
+    print_success "HAProxy 3.3.2 Compiled & Installed"
+    cd /root
+else
+    print_success "HAProxy 3.3.2 already installed"
+fi
 
 # Set Root Password
 echo -e "$PASSWORD\n$PASSWORD" | passwd root >> $LOG_FILE 2>&1
@@ -373,7 +416,7 @@ print_success "Nginx Decoy Live (Port 80)"
 print_step "6/10" "Configuring HAProxy Split-Stream (Port 443 -> SSH Default)..."
 cat > /etc/haproxy/haproxy.cfg <<EOF
 global
-    # Version 3.4 optimizations
+    # Version 3.3.2 optimizations
     maxconn 100000
     nbthread 4
     hard-stop-after 5s
