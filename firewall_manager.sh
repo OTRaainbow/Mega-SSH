@@ -172,7 +172,7 @@ iptables -A INPUT -p tcp --dport 2222 -j ACCEPT
 iptables -P INPUT DROP
 
 # conntrack rate limiting for port 443 (EagleNet logic)
-iptables -I INPUT -p tcp --dport 443 -m conntrack --ctstate NEW -m limit --limit 1200/minute --limit-burst 2400 -j ACCEPT
+iptables -I INPUT -p tcp --dport 443 -j ACCEPT
 
 # 7. Persistence
 mkdir -p /etc/iptables

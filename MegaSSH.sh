@@ -449,7 +449,7 @@ cat > /etc/haproxy/haproxy.cfg <<EOF
 global
     # Version 3.3.2 optimizations
     maxconn 100000
-    nbthread 4
+    # nbthread removed for auto-detection (Prevents High CPU on small VPS)
     hard-stop-after 5s
     log /dev/log local0
     log /dev/log local1 notice
@@ -476,26 +476,34 @@ frontend stats
 frontend multiplexer_443
     bind *:${PORT_HAPROXY}
     mode tcp
-    # 200ms Delay: precision sniffing for DPI evasion
-    tcp-request inspect-delay 200ms
+    # 2s Delay: Balanced for performance and inspection
+    tcp-request inspect-delay 2s
     
-    # Signature for SSH-2.0 (Hex: 5353482d322e30)
-    # If the DPI probes with an empty or non-SSH packet, send it to the Decoy
-    acl is_ssh payload(0,7) -m bin 5353482d322e30
+    # ACLs for Traffic Identification
+    # Match SSL/TLS ClientHello (ContentType 22 / 0x16)
+    acl is_ssl payload(0,1) -m bin 16
+    # Match HTTP methods (simplified check)
+    acl is_http req.proto_http
     
-    # Routing Logic
-    use_backend ssh_backend if is_ssh
-    default_backend web_decoy_backend
+    # Routing Logic:
+    # If it looks like SSL or HTTP, send to Decoy (Nginx)
+    use_backend web_decoy_backend if is_ssl
+    use_backend web_decoy_backend if is_http
+    
+    # Default Fallback -> SSH
+    # If it waits (standard SSH behavior) or doesn't look like Web, send to SSH.
+    default_backend ssh_backend
 
 backend ssh_backend
     mode tcp
     # Option 'abortonclose' helps clear zombie DPI probes
     option abortonclose
     balance roundrobin
-    server ssh_srv_1 127.0.0.1:2222 check
-    server ssh_srv_2 127.0.0.1:2223 check
-    server ssh_srv_3 127.0.0.1:2224 check
-    server ssh_srv_4 127.0.0.1:2225 check
+    # REMOVED 'check' to avoid false positive health failures causing EOF
+    server ssh_srv_1 127.0.0.1:2222
+    server ssh_srv_2 127.0.0.1:2223
+    server ssh_srv_3 127.0.0.1:2224
+    server ssh_srv_4 127.0.0.1:2225
 backend web_decoy_backend
     mode tcp
     server web_srv 127.0.0.1:8080 check

@@ -188,12 +188,11 @@ fi
 
 # --- Step 3: High-Standard Kernel Tuning (sysctl) ---
 print_step "3/5" "Applying Advanced Kernel Tuning..."
-cat > /etc/sysctl.d/99-ssh-direct.conf <<EOF
-# MegaSSH High-Performance Tuning (Consolidated)
+# MegaSSH Stable Tuning (optimized for VPS)
 # --- General System ---
 fs.file-max = 1000000
-net.core.netdev_budget = 5000
-net.core.netdev_max_backlog = 65536
+net.core.netdev_budget = 600
+net.core.netdev_max_backlog = 16384
 net.core.optmem_max = 65536
 net.core.somaxconn = 65535
 
@@ -208,13 +207,15 @@ net.ipv4.tcp_fastopen = 3
 net.ipv4.tcp_slow_start_after_idle = 0
 net.ipv4.tcp_mtu_probing = 1
 
-# --- Buffer Sizes (Throughput Optimization) ---
-net.core.rmem_default = 1048576
-net.core.rmem_max = 67108864
-net.core.wmem_default = 1048576
-net.core.wmem_max = 67108864
-net.ipv4.tcp_rmem = 4096 87380 33554432
-net.ipv4.tcp_wmem = 4096 65536 33554432
+# --- Buffer Sizes (Stability Optimized) ---
+# Previous 64MB was too high for <4GB RAM, causing thrashing. 
+# Reduced to ~16MB Max, which is plenty for 1Gbps.
+net.core.rmem_default = 262144
+net.core.rmem_max = 16777216
+net.core.wmem_default = 262144
+net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
 net.ipv4.tcp_window_scaling = 1
 net.ipv4.tcp_notsent_lowat = 16384
 
@@ -229,7 +230,6 @@ net.ipv4.tcp_max_orphans = 262144
 net.ipv6.conf.all.disable_ipv6 = 1
 net.ipv6.conf.default.disable_ipv6 = 1
 net.ipv6.conf.lo.disable_ipv6 = 1
-EOF
 
 sysctl --system > /dev/null
 print_success "Kernel parameters applied."
@@ -249,7 +249,7 @@ print_step "5/5" "Applying DPI Evasion (MSS Clamping: 1200)..."
 if iptables -t mangle -C POSTROUTING -o "$IFACE" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1200 2>/dev/null; then
      print_success "MSS Clamp rule already exists."
 else
-    iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1200
+    iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1360
     print_success "MSS Clamp rule applied to POSTROUTING."
 fi
 
