@@ -6,30 +6,66 @@
 # Features: HAProxy Decoy, ChaCha20, UDPGW, BBR, Geofencing, Stunnel
 # ==============================================================================
 
-# --- UI & Colors ---
+# --- Professional UI & Colors ---
+# Bold
+BBLACK='\033[1;30m'       # Black
+BRED='\033[1;31m'         # Red
+BGREEN='\033[1;32m'       # Green
+BYELLOW='\033[1;33m'      # Yellow
+BBLUE='\033[1;34m'        # Blue
+BPURPLE='\033[1;35m'      # Purple
+BCYAN='\033[1;36m'        # Cyan
+BWHITE='\033[1;37m'       # White
+
+# Regular
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
+YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# ASCII Banner
+# Helper Functions & Logging
+LOG_FILE="/root/megassh_install.log"
+exec > >(tee -a ${LOG_FILE}) 2>&1
+
 print_banner() {
     clear
-    echo -e "${CYAN}"
-    echo "  __  __                  SSSSS   SSSSS  HH   HH "
-    echo " |  \/  | ___  __ _  __ _SS      SS      HH   HH "
-    echo " | |\/| |/ _ \/ _\` |/ _\` |SSSSS   SSSSS  HHH HHH "
-    echo " | |  | |  __/ (_| | (_| |    SS      SS HH   HH "
-    echo " |_|  |_|\___|\__, |\__,_|SSSSS   SSSSS  HH   HH "
-    echo "              |___/                              "
-    echo "         High-Security VPN Installer             "
-    echo -e "${NC}"
-    echo -e "${BLUE}=================================================${NC}"
-    echo -e "${YELLOW}  Target OS: Ubuntu 24.04 | Version: 5.0 (FINAL SYNC)${NC}"
-    echo -e "${BLUE}=================================================${NC}"
+    echo -e "${BBLUE}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BBLUE}║${NC} ${BCYAN}  __  __                  SSSSS   SSSSS  HH   HH                         ${BBLUE}║${NC}"
+    echo -e "${BBLUE}║${NC} ${BCYAN} |  \/  | ___  __ _  __ _SS      SS      HH   HH                         ${BBLUE}║${NC}"
+    echo -e "${BBLUE}║${NC} ${BCYAN} | |\/| |/ _ \/ _\` |/ _\` |SSSSS   SSSSS  HHH HHH                         ${BBLUE}║${NC}"
+    echo -e "${BBLUE}║${NC} ${BCYAN} | |  | |  __/ (_| | (_| |    SS      SS HH   HH                         ${BBLUE}║${NC}"
+    echo -e "${BBLUE}║${NC} ${BCYAN} |_|  |_|\___|\__, |\__,_|SSSSS   SSSSS  HH   HH                         ${BBLUE}║${NC}"
+    echo -e "${BBLUE}║${NC} ${BCYAN}              |___/                                                      ${BBLUE}║${NC}"
+    echo -e "${BBLUE}║                                                                             ║${NC}"
+    echo -e "${BBLUE}║${NC} ${BWHITE}        High-Security VPN Installer                                          ${BBLUE}║${NC}"
+    echo -e "${BBLUE}║${NC} ${BYELLOW}        Target OS: Ubuntu 24.04 | Version: 5.0 (FINAL SYNC)                  ${BBLUE}║${NC}"
+    echo -e "${BBLUE}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
+}
+
+print_step() {
+    local step_num=$1
+    local step_msg=$2
+    echo -e "${BBLUE}[ STEP ${step_num} ]${NC} ${BWHITE}${step_msg}${NC}"
+}
+
+print_info() {
+    echo -e "${BBLUE}[ INFO ]${NC} $1"
+}
+
+print_success() {
+    echo -e "${BGREEN}[  OK  ]${NC} $1"
+}
+
+print_error() {
+    echo -e "${BRED}[ FAIL ]${NC} $1"
+}
+
+print_warn() {
+    echo -e "${BYELLOW}[ WARN ]${NC} $1"
 }
 
 # Spinner Function for long tasks
@@ -48,22 +84,6 @@ run_with_spinner() {
     printf "    \b\b\b\b"
 }
 
-# Helper Functions & Logging
-LOG_FILE="/root/megassh_install.log"
-exec > >(tee -a ${LOG_FILE}) 2>&1
-
-print_step() {
-    echo -e "${CYAN}[Step $1] ${NC}$2"
-}
-
-print_success() {
-    echo -e "${GREEN}[✔] $1${NC}"
-}
-
-print_error() {
-    echo -e "${RED}[✘] $1${NC}"
-}
-
 # Health Check Function with Retries
 check_service_health() {
     local service=$1
@@ -76,7 +96,7 @@ check_service_health() {
         if systemctl is-active --quiet "$service" && (ss -tuln | grep -q ":$port "); then
             return 0
         fi
-        echo -e "${YELLOW}[!] Attempt $attempt/$max_attempts failed for $service. Retrying in 2s...${NC}"
+        print_warn "Attempt $attempt/$max_attempts failed for $service. Retrying in 2s..."
         sleep 2
         ((attempt++))
     done
@@ -107,31 +127,31 @@ fetch_script() {
     if [ ! -f "$script_name" ]; then
         # Check if URL is configured
         if [[ "$REPO_BASE" == *"ChangeMe"* ]]; then
-            echo -e "${RED}[!] Error: REPO_BASE is not configured!${NC}"
-            echo -e "${YELLOW}    1. Open MegaSSH.sh${NC}"
-            echo -e "${YELLOW}    2. Change 'ChangeMe/MegaSSH' to your GitHub User/Repo${NC}"
-            echo -e "${YELLOW}    3. OR place '$script_name' in this directory manually.${NC}"
+            print_error "Error: REPO_BASE is not configured!"
+            print_warn "1. Open MegaSSH.sh"
+            print_warn "2. Change 'ChangeMe/MegaSSH' to your GitHub User/Repo"
+            print_warn "3. OR place '$script_name' in this directory manually."
             echo "Error: REPO_BASE unconfigured while fetching $script_name" >> $LOG_FILE
             exit 1
         fi
 
         local target_url="${REPO_BASE}/${script_name}"
-        echo -e "${YELLOW}[~] Fetching $script_name from: $target_url${NC}"
+        print_info "Fetching $script_name from: $target_url"
         
         wget -q -O "$script_name" "$target_url"
         local ret=$?
         
         if [ $ret -ne 0 ]; then
             print_error "Failed to download $script_name."
-            echo -e "${RED}    Details:${NC}"
+            print_error "Details:"
             echo -e "    - URL: $target_url"
             echo -e "    - Wget Exit Code: $ret"
             echo "Failed to fetch $target_url (Exit: $ret)" >> $LOG_FILE
             exit 1
         fi
-        echo -e "${GREEN}    Successfully downloaded $script_name${NC}"
+        print_success "Successfully downloaded $script_name"
     else
-        echo -e "${GREEN}[✔] Found local file: $script_name${NC}"
+        print_success "Found local file: $script_name"
     fi
     chmod +x "$script_name"
 }
@@ -147,9 +167,9 @@ run_with_spinner $PID
 wait $PID
 if [ $? -ne 0 ]; then
     print_error "Dependency Installation Failed!"
-    echo -e "${YELLOW}Last 20 lines of log:${NC}"
+    print_warn "Last 20 lines of log:"
     tail -n 20 $LOG_FILE
-    echo -e "${RED}[!] Please fix the error above (e.g., release apt lock) and run again.${NC}"
+    print_error "Please fix the error above (e.g., release apt lock) and run again."
     exit 1
 fi
 
@@ -242,11 +262,11 @@ if [ -f /usr/sbin/sshd ]; then
         # Escape dots for use in sed regex
         ESCAPED_VER=$(echo "$CURRENT_VER" | sed 's/\./\\./g')
         sed -i "s/$ESCAPED_VER/Microsoft_IIS/g" /usr/sbin/sshd
-        echo -e "${GREEN}[✔] SSH Binary Obfuscated (Identifies as Microsoft_IIS)${NC}"
+        print_success "SSH Binary Obfuscated (Identifies as Microsoft_IIS)"
     else
         # Fallback to the requested 9.6p1 specifically if detection fails
         sed -i 's/OpenSSH_9.6p1/Microsoft_IIS/g' /usr/sbin/sshd
-        echo -e "${YELLOW}[!] SSH Binary Obfuscated (Manual Match Search)${NC}"
+        print_warn "SSH Binary Obfuscated (Manual Match Search)"
     fi
 fi
 
@@ -403,7 +423,7 @@ server {
     return 301 https://www.digikala.com\$request_uri;
 }
 EOF
-echo -e "${YELLOW}[~] Validating Nginx Config...${NC}"
+echo -e "${BYELLOW}[ WARN ]${NC} Validating Nginx Config..."
 nginx -t
 if [ $? -ne 0 ]; then
     print_error "Nginx Config is Invalid!"
@@ -493,7 +513,7 @@ print_step "8/10" "Applying Advanced Firewall & Geofencing..."
 download_user_list() {
     local cc=$1
     local url="https://raw.githubusercontent.com/OTRaainbow/Mega-SSH/main/ip2location_country_${cc}.netset"
-    echo -e "${YELLOW}[~] Downloading $cc List from your GitHub...${NC}"
+    print_warn "Downloading $cc List from your GitHub..."
     wget -q -O "ip2location_country_${cc}.netset" "$url"
 }
 download_user_list "ir"
@@ -543,40 +563,41 @@ systemctl restart cron
 print_success "Cron Jobs Scheduled"
 
 # Prepare Audit Tool
-echo -e "${YELLOW}[~] Setting up Audit & Management Tools...${NC}"
-fetch_script "mega-audit.sh" || echo -e "${RED}[!] Note: mega-audit.sh not found on GitHub. Please upload it to your repo.${NC}"
+print_info "Setting up Audit & Management Tools..."
+fetch_script "mega-audit.sh" || print_warn "Note: mega-audit.sh not found on GitHub. Please upload it to your repo."
 
 # Fetch Management Scripts
 fetch_script "useradd.py"
 fetch_script "MegaSSH-WARP.sh"
 
 # --- Final Summary ---
+# --- Final Summary ---
 echo ""
-echo -e "${BLUE}=================================================${NC}"
-echo -e "${GREEN}       INSTALLATION COMPLETE SUCCESSFULLY        ${NC}"
-echo -e "${BLUE}=================================================${NC}"
-echo -e "${YELLOW}Connection Details:${NC}"
-echo -e "  • ${CYAN}Direct SSH:${NC}    YourIP:443"
-echo -e "  • ${RED}Rescue SSH:${NC}    YourIP:22 (Temp Enabled)"
-echo -e "  • ${CYAN}SSL Wrapped:${NC}   YourIP:8443 (via Stunnel)"
-echo -e "  • ${CYAN}User Protocol:${NC} ChaCha20-Poly1305"
-echo -e "  • ${CYAN}Decoy Site:${NC}    Digikala (https://YourIP/)"
-echo -e ""
-echo -e "${YELLOW}Management Commands:${NC}"
-echo -e "  • Add Users:     ${GREEN}Use useradd.py GUI${NC}"
-echo -e "  • Add WARP:      ${GREEN}./MegaSSH-WARP.sh${NC}"
-echo -e "  • ${RED}Run Audit:${NC}     ${GREEN}./mega-audit.sh${NC}"
-echo -e "${BLUE}=================================================${NC}"
+echo -e "${BBLUE}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BBLUE}║${NC} ${BGREEN}                  INSTALLATION COMPLETE SUCCESSFULLY                         ${BBLUE}║${NC}"
+echo -e "${BBLUE}╠═════════════════════════════════════════════════════════════════════════════╣${NC}"
+echo -e "${BBLUE}║${NC} ${BYELLOW}Connection Details:${NC}                                                         ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC}   • ${BCYAN}Direct SSH:${NC}    YourIP:443                                             ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC}   • ${BRED}Rescue SSH:${NC}    YourIP:22 (Temp Enabled)                               ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC}   • ${BCYAN}SSL Wrapped:${NC}   YourIP:8443 (via Stunnel)                              ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC}   • ${BCYAN}User Protocol:${NC} ChaCha20-Poly1305                                      ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC}   • ${BCYAN}Decoy Site:${NC}    Digikala (https://YourIP/)                             ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC}                                                                             ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC} ${BYELLOW}Management Commands:${NC}                                                        ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC}   • Add Users:     ${BGREEN}Use useradd.py GUI${NC}                                      ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC}   • Add WARP:      ${BGREEN}./MegaSSH-WARP.sh${NC}                                       ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC}   • ${BRED}Run Audit:${NC}     ${BGREEN}./mega-audit.sh${NC}                                        ${BBLUE}║${NC}"
+echo -e "${BBLUE}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
 # --- Integrated Health Audit & Final Prompt ---
 run_integrated_audit() {
-    echo -e "${CYAN}=================================================${NC}"
-    echo -e "${CYAN}        MEGASSH SYSTEM AUDIT (CHECK LOG)        ${NC}"
-    echo -e "${CYAN}=================================================${NC}"
+    echo -e "${BBLUE}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BBLUE}║${NC} ${BCYAN}                   MEGASSH SYSTEM AUDIT (CHECK LOG)                          ${BBLUE}║${NC}"
+    echo -e "${BBLUE}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
     date
     
-    echo -e "\n${YELLOW}--- Component Status ---${NC}"
+    echo -e "\n${BYELLOW}--- Component Status ---${NC}"
     # Diagnostic check function
     check_port() {
         local name=$1; local port=$2
@@ -595,7 +616,7 @@ run_integrated_audit() {
     check_port "UDPGW" 7301
     check_port "Rescue SSH" 22
 
-    echo -e "\n${YELLOW}--- Firewall Integrity ---${NC}"
+    echo -e "\n${BYELLOW}--- Firewall Integrity ---${NC}"
     # Check IPSet
     IR_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
     RU_CN_COUNT=$(ipset list country_block_in 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
@@ -622,7 +643,7 @@ run_integrated_audit() {
     IPV6_STATUS=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)
     if [ "$IPV6_STATUS" == "1" ]; then echo -e "${GREEN}[DISABLED]${NC}"; else echo -e "${RED}[LEAKING]${NC}"; fi
 
-    echo -e "\n${YELLOW}--- Live Geo-Blocking Test (Strict) ---${NC}"
+    echo -e "\n${BYELLOW}--- Live Geo-Blocking Test (Strict) ---${NC}"
     test_block() {
         local site=$1; local ip=$2
         printf "%-35s" "[~] Testing $site..."
@@ -640,9 +661,9 @@ run_integrated_audit() {
     test_block "baidu.com (China)" "110.242.68.66"
     test_block "digikala.com (Iran)" "185.239.104.14"
 
-    echo -e "\n${CYAN}=================================================${NC}"
-    echo -e "${GREEN}      ALL COMPONENTS VERIFIED & CORRECT        ${NC}"
-    echo -e "${CYAN}=================================================${NC}"
+    echo -e "\n${BBLUE}=================================================${NC}"
+    echo -e "${BGREEN}      ALL COMPONENTS VERIFIED & CORRECT          ${NC}"
+    echo -e "${BBLUE}=================================================${NC}"
     
     echo -e "\n${RED}[!] IMPORTANT: System changes require a reboot to be 100% effective.${NC}"
     read -p "Would you like to REBOOT the server now? (y/n): " confirm

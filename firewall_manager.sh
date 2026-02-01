@@ -5,28 +5,64 @@
 # Highest possible priority (Priority 2) to override all tunnel drivers.
 # ==============================================================================
 
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-NC='\033[0m'
+# --- Professional UI & Colors ---
+# Bold
+BBLACK='\033[1;30m'       # Black
+BRED='\033[1;31m'         # Red
+BGREEN='\033[1;32m'       # Green
+BYELLOW='\033[1;33m'      # Yellow
+BBLUE='\033[1;34m'        # Blue
+BPURPLE='\033[1;35m'      # Purple
+BCYAN='\033[1;36m'        # Cyan
+BWHITE='\033[1;37m'       # White
 
-echo -e "${CYAN}=================================================${NC}"
-echo -e "${CYAN}    NUCLEAR FIREWALL 5.0 - ABSOLUTE PRIORITY     ${NC}"
-echo -e "${CYAN}=================================================${NC}"
+# Regular
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+print_step() {
+    local step_num=$1
+    local step_msg=$2
+    echo -e "${BBLUE}[ STEP ${step_num} ]${NC} ${BWHITE}${step_msg}${NC}"
+}
+
+print_info() {
+    echo -e "${BBLUE}[ INFO ]${NC} $1"
+}
+
+print_success() {
+    echo -e "${BGREEN}[  OK  ]${NC} $1"
+}
+
+print_error() {
+    echo -e "${BRED}[ FAIL ]${NC} $1"
+}
+
+print_warn() {
+    echo -e "${BYELLOW}[ WARN ]${NC} $1"
+}
+
+echo -e "${BBLUE}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BBLUE}║${NC} ${BRED}        NUCLEAR FIREWALL 5.0 - ABSOLUTE PRIORITY PROTECTION           ${BBLUE}║${NC}"
+echo -e "${BBLUE}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
 
 # 1. Setup IPSets
-echo -e "${YELLOW}[~] Initializing IPSets...${NC}"
+print_step "1/7" "Initializing IPSets..."
 ipset create country_block_in hash:net maxelem 1000000 -exist
 ipset create country_block_out hash:net maxelem 1000000 -exist
 
 load_set_nuclear() {
     local cc=$1; local file=$2; local target_set=$3
-    if [ ! -s "$file" ]; then echo -e "${RED}[✘] Error: $file is empty!${NC}"; return 1; fi
-    if head -n 5 "$file" | grep -q "<!DOCTYPE html>"; then echo -e "${RED}[✘] Error: $file is HTML!${NC}"; return 1; fi
+    if [ ! -s "$file" ]; then print_error "Error: $file is empty!"; return 1; fi
+    if head -n 5 "$file" | grep -q "<!DOCTYPE html>"; then print_error "Error: $file is HTML!"; return 1; fi
 
     local tmp_set="tmp_${target_set}_${cc}"
-    echo -n -e "${YELLOW}[~] Injecting $cc data into $target_set (atomic)...${NC}"
+    print_info "Injecting $cc data into $target_set (atomic)..."
     
     # Create temporary set for atomic swap
     ipset create "$tmp_set" hash:net maxelem 1000000 -exist
@@ -47,11 +83,11 @@ load_set_nuclear() {
     ipset destroy "$tmp_set" 2>/dev/null
     
     local count=$(ipset list "$target_set" | grep 'Number of entries' | awk '{print $4}')
-    echo -e " ${GREEN}[OK] ($count entries)${NC}"
+    print_success "($count entries)"
 }
 
 # 2. NUCLEAR FLUSH
-echo -e "${YELLOW}[~] Nuclear Flush (Cleaning all tables)...${NC}"
+print_step "2/7" "Nuclear Flush (Cleaning all tables)..."
 if command -v ufw >/dev/null; then ufw disable >/dev/null 2>&1; fi
 iptables -F
 iptables -X
@@ -68,7 +104,7 @@ done
 
 # 2.5 LOAD CUSTOM USER RULES (ufw-user-*)
 if [ -f "user.rules" ]; then
-    echo -e "${YELLOW}[~] Loading custom user.rules...${NC}"
+    print_step "2.5" "Loading custom user.rules..."
     for chain in ufw-user-input ufw-user-output ufw-user-forward ufw-before-logging-input ufw-before-logging-output ufw-before-logging-forward ufw-user-logging-input ufw-user-logging-output ufw-user-logging-forward ufw-after-logging-input ufw-after-logging-output ufw-after-logging-forward ufw-logging-deny ufw-logging-allow ufw-user-limit ufw-user-limit-accept; do
         iptables -N $chain 2>/dev/null
     done
@@ -80,13 +116,13 @@ if [ -f "user.rules" ]; then
     grep '^-A' user.rules | while read -r rule; do
         iptables $rule 2>/dev/null
     done
-    echo -e "${GREEN}[✔] user.rules loaded into iptables.${NC}"
+    print_success "user.rules loaded into iptables."
 else
-    echo -e "${YELLOW}[!] user.rules not found, skipping.${NC}"
+    print_warn "user.rules not found, skipping."
 fi
 
 # 3. ABSOLUTE PRIORITY POLICY ROUTING (Priority 2)
-echo -e "${YELLOW}[~] Applying Priority 2 Blackhole...${NC}"
+print_step "3/7" "Applying Priority 2 Blackhole..."
 ip route flush table 200 2>/dev/null
 ip route add blackhole default table 200 2>/dev/null
 
@@ -137,5 +173,5 @@ if command -v netfilter-persistent >/dev/null; then
     netfilter-persistent save > /dev/null 2>&1
 fi
 
-echo -e "Policy Rule Pri 2: $(ip rule show | grep 0x99)"
-echo -e "${GREEN}[✔] NUCLEAR FIREWALL 5.0 ACTIVE.${NC}"
+print_info "Policy Rule Pri 2: $(ip rule show | grep 0x99)"
+print_success "NUCLEAR FIREWALL 5.0 ACTIVE."

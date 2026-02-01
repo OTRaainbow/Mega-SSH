@@ -5,19 +5,34 @@
 # Features: Strict File/Package Checks, Extended Geo-Blocking Tests
 # ==============================================================================
 
-GREEN='\033[0;32m'
+# --- Professional UI & Colors ---
+# Bold
+BBLACK='\033[1;30m'       # Black
+BRED='\033[1;31m'         # Red
+BGREEN='\033[1;32m'       # Green
+BYELLOW='\033[1;33m'      # Yellow
+BBLUE='\033[1;34m'        # Blue
+BPURPLE='\033[1;35m'      # Purple
+BCYAN='\033[1;36m'        # Cyan
+BWHITE='\033[1;37m'       # White
+
+# Regular
 RED='\033[0;31m'
-YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
-NC='\033[0m'
+NC='\033[0m' # No Color
 
 LOG_FILE="/var/log/megassh_audit.log"
 echo "Audit started at $(date)" > "$LOG_FILE"
 
 print_header() {
-    echo -e "${CYAN}=================================================${NC}"
-    echo -e "${CYAN}        MEGASSH SYSTEM AUDIT (CHECK LOG)        ${NC}"
-    echo -e "${CYAN}=================================================${NC}"
+    clear
+    echo -e "${BBLUE}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BBLUE}║${NC} ${BCYAN}                   MEGASSH SYSTEM AUDIT (CHECK LOG)                          ${BBLUE}║${NC}"
+    echo -e "${BBLUE}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
     date
 }
 
@@ -37,7 +52,7 @@ GLOBAL_FAIL=0
 print_header
 
 # --- 1. Strict File Integrity Check ---
-echo -e "\n${YELLOW}--- 1. Critical File Integrity ---${NC}"
+echo -e "\n${BYELLOW}--- 1. Critical File Integrity ---${NC}"
 check_file() {
     local file=$1
     printf "%-40s" "[~] Checking $file..."
@@ -63,7 +78,7 @@ check_file "stunnel_manager.sh"
 check_file "shadowtls_manager.sh"
 
 # --- 2. Package & Dependency Check ---
-echo -e "\n${YELLOW}--- 2. Package Installation Status ---${NC}"
+echo -e "\n${BYELLOW}--- 2. Package Installation Status ---${NC}"
 check_pkg() {
     local pkg=$1
     printf "%-40s" "[~] Checking Package: $pkg..."
@@ -86,7 +101,7 @@ check_pkg "irqbalance"
 # check_pkg "linux-xanmod-x64v3" # Can't strict check pkg name easily if version changes, skip for now or check uname
 
 # --- 3. Component Service Checks ---
-echo -e "\n${YELLOW}--- 3. Service Status & Ports ---${NC}"
+echo -e "\n${BYELLOW}--- 3. Service Status & Ports ---${NC}"
 check_service() {
     local name=$1
     local port=$2
@@ -108,7 +123,7 @@ check_service "UDPGW" 7301
 check_service "Rescue SSH" 22
 
 # --- 4. Firewall & Geo-Block Integrity ---
-echo -e "\n${YELLOW}--- 4. Firewall Integrity ---${NC}"
+echo -e "\n${BYELLOW}--- 4. Firewall Integrity ---${NC}"
 
 # Check IPSet
 IR_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
@@ -150,8 +165,8 @@ else
 fi
 
 # --- 5. Extended Live Geo-Blocking Tests ---
-echo -e "\n${YELLOW}--- 5. Extended Geo-Blocking Test (Ping/Curl) ---${NC}"
-echo -e "${CYAN}Testing strict outbound blocking (Should FAIL to connect)${NC}"
+echo -e "\n${BYELLOW}--- 5. Extended Geo-Blocking Test (Ping/Curl) ---${NC}"
+echo -e "${BCYAN}Testing strict outbound blocking (Should FAIL to connect)${NC}"
 
 test_block() {
     local site=$1
@@ -173,21 +188,21 @@ test_block() {
     fi
 }
 
-echo -e "\n${YELLOW}>> Block Russia (RU)${NC}"
+echo -e "\n${BBLUE}>> Block Russia (RU)${NC}"
 test_block "vk.com" "VKontakte"
 test_block "mail.ru" "Mail.ru"
 test_block "yandex.ru" "Yandex"
 test_block "ok.ru" "Odnoklassniki"
 test_block "gosuslugi.ru" "Gosuslugi"
 
-echo -e "\n${YELLOW}>> Block China (CN)${NC}"
+echo -e "\n${BBLUE}>> Block China (CN)${NC}"
 test_block "baidu.com" "Baidu"
 test_block "qq.com" "QQ"
 test_block "taobao.com" "Taobao"
 test_block "weibo.com" "Weibo"
 test_block "360.cn" "360 Security"
 
-echo -e "\n${YELLOW}>> Block Iran (IR)${NC}"
+echo -e "\n${BBLUE}>> Block Iran (IR)${NC}"
 test_block "digikala.com" "Digikala"
 test_block "varzesh3.com" "Varzesh3"
 test_block "aparat.com" "Aparat"
@@ -195,14 +210,14 @@ test_block "shaparak.ir" "Shaparak"
 test_block "divar.ir" "Divar"
 
 # --- 6. Final Verdict ---
-echo -e "\n${CYAN}=================================================${NC}"
+echo -e "\n${BBLUE}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
 if [ "$GLOBAL_FAIL" -eq 1 ]; then
-    echo -e "${RED}      AUDIT FAILED - CRITICAL ISSUES FOUND       ${NC}"
-    echo -e "${RED}      Check $LOG_FILE for details.               ${NC}"
-    echo -e "${CYAN}=================================================${NC}"
+    echo -e "${BBLUE}║${NC} ${BRED}          AUDIT FAILED - CRITICAL ISSUES DETECTED                            ${BBLUE}║${NC}"
+    echo -e "${BBLUE}║${NC} ${BRED}          Check $LOG_FILE for details.                                       ${BBLUE}║${NC}"
+    echo -e "${BBLUE}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
     exit 1
 else
-    echo -e "${GREEN}      ALL SYSTEMS GREEN - INSTALLATION PERFECT   ${NC}"
-    echo -e "${CYAN}=================================================${NC}"
+    echo -e "${BBLUE}║${NC} ${BGREEN}          ALL SYSTEMS GREEN - INSTALLATION VERIFIED                          ${BBLUE}║${NC}"
+    echo -e "${BBLUE}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
     exit 0
 fi

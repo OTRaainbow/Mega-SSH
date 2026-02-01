@@ -6,31 +6,62 @@
 # Features: Base Security + Cloudflare WARP Outbound
 # ==============================================================================
 
-# --- UI & Colors ---
+# --- Professional UI & Colors ---
+# Bold
+BBLACK='\033[1;30m'       # Black
+BRED='\033[1;31m'         # Red
+BGREEN='\033[1;32m'       # Green
+BYELLOW='\033[1;33m'      # Yellow
+BBLUE='\033[1;34m'        # Blue
+BPURPLE='\033[1;35m'      # Purple
+BCYAN='\033[1;36m'        # Cyan
+BWHITE='\033[1;37m'       # White
+
+# Regular
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
+YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
-NC='\033[0m'
+NC='\033[0m' # No Color
 
 print_banner() {
     clear
-    echo -e "${CYAN}"
-    echo "  __  __                  SSSSS   SSSSS  HH   HH "
-    echo " |  \/  | ___  __ _  __ _SS      SS      HH   HH "
-    echo " | |\/| |/ _ \/ _\` |/ _\` |SSSSS   SSSSS  HHH HHH "
-    echo " | |  | |  __/ (_| | (_| |    SS      SS HH   HH "
-    echo " |_|  |_|\___|\__, |\__,_|SSSSS   SSSSS  HH   HH "
-    echo "              |___/                              "
-    echo "             WARP ADD-ON MODULE                  "
-    echo -e "${NC}"
-    echo -e "${BLUE}=================================================${NC}"
+    echo -e "${BBLUE}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BBLUE}║${NC} ${BCYAN}  __  __                  SSSSS   SSSSS  HH   HH                         ${BBLUE}║${NC}"
+    echo -e "${BBLUE}║${NC} ${BCYAN} |  \/  | ___  __ _  __ _SS      SS      HH   HH                         ${BBLUE}║${NC}"
+    echo -e "${BBLUE}║${NC} ${BCYAN} | |\/| |/ _ \/ _\` |/ _\` |SSSSS   SSSSS  HHH HHH                         ${BBLUE}║${NC}"
+    echo -e "${BBLUE}║${NC} ${BCYAN} | |  | |  __/ (_| | (_| |    SS      SS HH   HH                         ${BBLUE}║${NC}"
+    echo -e "${BBLUE}║${NC} ${BCYAN} |_|  |_|\___|\__, |\__,_|SSSSS   SSSSS  HH   HH                         ${BBLUE}║${NC}"
+    echo -e "${BBLUE}║${NC} ${BCYAN}              |___/                                                      ${BBLUE}║${NC}"
+    echo -e "${BBLUE}║                                                                             ║${NC}"
+    echo -e "${BBLUE}║${NC} ${BWHITE}             WARP ADD-ON MODULE (Cloudflare Tunnel)                          ${BBLUE}║${NC}"
+    echo -e "${BBLUE}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
 }
 
-print_step() { echo -e "${CYAN}[Step $1] ${NC}$2"; }
-print_success() { echo -e "${GREEN}[✔] $1${NC}"; }
-print_error() { echo -e "${RED}[✘] $1${NC}"; }
+print_step() {
+    local step_num=$1
+    local step_msg=$2
+    echo -e "${BBLUE}[ STEP ${step_num} ]${NC} ${BWHITE}${step_msg}${NC}"
+}
+
+print_info() {
+    echo -e "${BBLUE}[ INFO ]${NC} $1"
+}
+
+print_success() {
+    echo -e "${BGREEN}[  OK  ]${NC} $1"
+}
+
+print_error() {
+    echo -e "${BRED}[ FAIL ]${NC} $1"
+}
+
+print_warn() {
+    echo -e "${BYELLOW}[ WARN ]${NC} $1"
+}
 
 # --- Execution ---
 print_banner
@@ -43,7 +74,7 @@ REPO_BASE="https://raw.githubusercontent.com/OTRaainbow/Mega-SSH/main"
 # 1. Run Base Setup first
 print_step "1/4" "Fetch & Run MegaSSH Core..."
 if [ ! -f "MegaSSH.sh" ]; then
-    echo -e "${YELLOW}[~] Fetching MegaSSH.sh...${NC}"
+    print_info "Fetching MegaSSH.sh..."
     wget -q -O "MegaSSH.sh" "${REPO_BASE}/MegaSSH.sh"
 fi
 
@@ -52,7 +83,7 @@ if [ ! -f "MegaSSH.sh" ]; then
     exit 1
 fi
 
-echo -e "\033[1;33m[~] Running MegaSSH.sh (Core Installer)...\033[0m"
+print_warn "Running MegaSSH.sh (Core Installer)..."
 chmod +x MegaSSH.sh
 ./MegaSSH.sh
 if [ $? -ne 0 ]; then
@@ -74,7 +105,7 @@ echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyr
 apt update && apt install -y cloudflare-warp
 
 # Ensure Service is Running
-print_step "Checking WARP Service..."
+print_step "2.1" "Checking WARP Service..."
 # Force Cleanup of Stale Sockets/Processes
 systemctl stop warp-svc > /dev/null 2>&1
 killall warp-svc > /dev/null 2>&1
@@ -131,7 +162,7 @@ ip rule add fwmark 0x100 lookup main prio 900
 PORTS_TCP="22 443 2222 2223 2224 2225 7301 8443 9443"
 PORTS_UDP="7301"
 
-echo -e "${YELLOW}[+] Marking Service Ports (Bypassing WARP for Inbound/Outbound consistency)...${NC}"
+print_info "Marking Service Ports (Bypassing WARP for Inbound/Outbound consistency)..."
 
 # TCP Ports
 for PORT in $PORTS_TCP; do
@@ -148,11 +179,11 @@ done
 # 4. Detect Current SSH Client IP (Backup access)
 CLIENT_IP=$(echo $SSH_CLIENT | awk '{print $1}')
 if [ -n "$CLIENT_IP" ]; then
-    echo -e "${YELLOW}[+] Excluding Your IP:   ${CLIENT_IP}${NC}"
+    print_info "Excluding Your IP:   ${CLIENT_IP}"
     warp-cli --accept-tos tunnel ip add "$CLIENT_IP" > /dev/null 2>&1
 fi
 
-echo -e "${YELLOW}[~] Connecting to WARP (This may take a moment)...${NC}"
+print_warn "Connecting to WARP (This may take a moment)..."
 warp-cli --accept-tos connect
 
 # Wait for connection
@@ -178,16 +209,18 @@ STATUS=$(warp-cli --accept-tos status | grep "Status")
 print_success "WARP Active: $STATUS"
 
 echo ""
-echo -e "${BLUE}=================================================${NC}"
-echo -e "${GREEN}       WARP INTEGRATION COMPLETE                 ${NC}"
-echo -e "${BLUE}=================================================${NC}"
+echo ""
+echo -e "${BBLUE}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BBLUE}║${NC} ${BGREEN}                   WARP INTEGRATION COMPLETED SUCCESSFULLY                   ${BBLUE}║${NC}"
+echo -e "${BBLUE}╠═════════════════════════════════════════════════════════════════════════════╣${NC}"
 if [ -n "$IS_WARP" ]; then
-    echo -e "  • ${GREEN}WARP Status:${NC}   ACTIVE (System-wide)"
-    echo -e "  • ${CYAN}Public IP:${NC}     $WARP_IP (Protected)"
+    printf "${BBLUE}║${NC}   • ${BGREEN}WARP Status:${NC}   ACTIVE (System-wide)                                   ${BBLUE}║${NC}\n"
+    printf "${BBLUE}║${NC}   • ${BCYAN}Public IP:${NC}     %-33s        ${BBLUE}║${NC}\n" "$WARP_IP (Protected)"
 else
-    echo -e "  • ${RED}WARP Status:${NC}   CONNECTION FAILED"
-    echo -e "  • ${YELLOW}Debug:${NC}         Check 'journalctl -u warp-svc'"
+    printf "${BBLUE}║${NC}   • ${BRED}WARP Status:${NC}   CONNECTION FAILED                                      ${BBLUE}║${NC}\n"
+    printf "${BBLUE}║${NC}   • ${BYELLOW}Debug:${NC}         Check 'journalctl -u warp-svc'                         ${BBLUE}║${NC}\n"
 fi
-echo -e "  • ${CYAN}Usage:${NC}       All server traffic is now routed through Cloudflare."
+echo -e "${BBLUE}║${NC}   • ${BCYAN}Usage:${NC}         All server traffic is now routed through Cloudflare.   ${BBLUE}║${NC}"
+echo -e "${BBLUE}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 

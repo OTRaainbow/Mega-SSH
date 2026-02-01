@@ -4,6 +4,48 @@
 # Action: SILENT DROP (Blackhole)
 # ==============================================================================
 
+# --- Professional UI & Colors ---
+# Bold
+BBLACK='\033[1;30m'       # Black
+BRED='\033[1;31m'         # Red
+BGREEN='\033[1;32m'       # Green
+BYELLOW='\033[1;33m'      # Yellow
+BBLUE='\033[1;34m'        # Blue
+BPURPLE='\033[1;35m'      # Purple
+BCYAN='\033[1;36m'        # Cyan
+BWHITE='\033[1;37m'       # White
+
+# Regular
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+print_step() {
+    local step_num=$1
+    local step_msg=$2
+    echo -e "${BBLUE}[ STEP ${step_num} ]${NC} ${BWHITE}${step_msg}${NC}"
+}
+
+print_info() {
+    echo -e "${BBLUE}[ INFO ]${NC} $1"
+}
+
+print_success() {
+    echo -e "${BGREEN}[  OK  ]${NC} $1"
+}
+
+print_error() {
+    echo -e "${BRED}[ FAIL ]${NC} $1"
+}
+
+print_warn() {
+    echo -e "${BYELLOW}[ WARN ]${NC} $1"
+}
+
 # Search for binaries if not in PATH
 IPSET_BIN=$(which ipset)
 IPTABLES_BIN=$(which iptables)
@@ -14,7 +56,7 @@ mkdir -p "$RULES_DIR"
 
 # 1. Initialize High-Performance Sets
 # We use a swap method to ensure zero downtime during updates
-echo "[+] Initializing Blocklists..."
+print_step "1/4" "Initializing Blocklists..."
 
 $IPSET_BIN create -! country_block_out hash:net maxelem 1000000
 
@@ -27,11 +69,11 @@ load_set() {
     local file=$1
     local set_name=$2
     if [ -f "$file" ]; then
-        echo "   Processing $file..."
+        print_info "Processing $file..."
         # Extract only valid CIDRs (skip comments #), format for ipset restore
         grep -vE "^#|^$" "$file" | sed "s/^/add $set_name /" | $IPSET_BIN restore -!
     else
-        echo "   [!] File not found: $file"
+        print_warn "File not found: $file"
     fi
 }
 
@@ -41,12 +83,12 @@ load_set "$RULES_DIR/ru.netset" "country_block_out_tmp"
 load_set "$RULES_DIR/ir.netset" "country_block_out_tmp"
 
 # 4. Atomic Swap (Apply new rules instantly)
-echo "[+] Swapping sets..."
+print_step "3/4" "Swapping sets..."
 $IPSET_BIN swap country_block_out_tmp country_block_out
 $IPSET_BIN destroy country_block_out_tmp
 
 # 5. Apply Draconian IPTables Rules
-echo "[+] Applying Firewall Rules (DROP)..."
+print_step "4/4" "Applying Firewall Rules (DROP)..."
 
 # Flush previous related rules to avoid duplication
 $IPTABLES_BIN -D OUTPUT -m set --match-set country_block_out dst -j DROP 2>/dev/null
@@ -64,9 +106,9 @@ if [ -d "/etc/iptables" ]; then
     if command -v iptables-save >/dev/null; then
         iptables-save > /etc/iptables/rules.v4
     else
-        $IPTABLES_BIN-save > /etc/iptables/rules.v4 2>/dev/null || echo "[!] Warning: iptables-save not found."
+        $IPTABLES_BIN-save > /etc/iptables/rules.v4 2>/dev/null || print_warn "Warning: iptables-save not found."
     fi
 fi
 
-echo "[SUCCESS] Outgoing traffic to CN, RU, and IR is now strictly blackholed."
-echo "Total subnets blocked: $($IPSET_BIN list country_block_out | grep 'Number of entries' | awk '{print $4}')"
+print_success "Outgoing traffic to CN, RU, and IR is now strictly blackholed."
+print_info "Total subnets blocked: $($IPSET_BIN list country_block_out | grep 'Number of entries' | awk '{print $4}')"

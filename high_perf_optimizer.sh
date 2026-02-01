@@ -12,72 +12,111 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# Visual Feedback Colors
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
+# --- Professional UI & Colors ---
+# Bold
+BBLACK='\033[1;30m'       # Black
+BRED='\033[1;31m'         # Red
+BGREEN='\033[1;32m'       # Green
+BYELLOW='\033[1;33m'      # Yellow
+BBLUE='\033[1;34m'        # Blue
+BPURPLE='\033[1;35m'      # Purple
+BCYAN='\033[1;36m'        # Cyan
+BWHITE='\033[1;37m'       # White
+
+# Regular
 RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}[+] Starting High-Performance Optimization (Consolidated)...${NC}"
+print_step() {
+    local step_num=$1
+    local step_msg=$2
+    echo -e "${BBLUE}[ STEP ${step_num} ]${NC} ${BWHITE}${step_msg}${NC}"
+}
+
+print_info() {
+    echo -e "${BBLUE}[ INFO ]${NC} $1"
+}
+
+print_success() {
+    echo -e "${BGREEN}[  OK  ]${NC} $1"
+}
+
+print_error() {
+    echo -e "${BRED}[ FAIL ]${NC} $1"
+}
+
+print_warn() {
+    echo -e "${BYELLOW}[ WARN ]${NC} $1"
+}
+
+echo -e "${BBLUE}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BBLUE}║${NC} ${BCYAN}                   HIGH-PERFORMANCE SYSTEM OPTIMIZER                         ${BBLUE}║${NC}"
+echo -e "${BBLUE}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
+print_info "Starting High-Performance Optimization (Consolidated)..."
 
 # Dynamic Interface Detection (Route to default gateway)
 IFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
 if [ -z "$IFACE" ]; then
-    echo -e "${RED}[✘] Could not detect primary network interface! Aborting.${NC}"
+    print_error "Could not detect primary network interface! Aborting."
     exit 1
 fi
-echo -e "${YELLOW}[~] Detected Primary Interface: ${IFACE}${NC}"
+print_info "Detected Primary Interface: ${IFACE}"
 
 # --- Step 1: XanMod Kernel Installation (LTS/Stable) ---
-echo -e "${YELLOW}[~] Step 1: Checking/Installing XanMod Kernel...${NC}"
+print_step "1/5" "Checking/Installing XanMod Kernel..."
 if grep -q "xanmod" /etc/apt/sources.list.d/xanmod-release.list 2>/dev/null; then
      echo -e "${GREEN}[✔] XanMod repository already exists.${NC}"
 else
-    echo -e "${YELLOW}[~] Registering XanMod Repository...${NC}"
+    print_info "Registering XanMod Repository..."
     wget -qO - https://dl.xanmod.org/archive.key | gpg --dearmor -o /usr/share/keyrings/xanmod-archive-keyring.gpg
     echo 'deb [signed-by=/usr/share/keyrings/xanmod-archive-keyring.gpg] http://deb.xanmod.org releases main' | tee /etc/apt/sources.list.d/xanmod-release.list
 fi
 
-echo -e "${YELLOW}[~] Updating apt and installing linux-xanmod-x64v3...${NC}"
+print_info "Updating apt and installing linux-xanmod-x64v3..."
 # Use non-interactive mode to avoid prompts
-DEBIAN_FRONTEND=noninteractive apt-get update -y
-DEBIAN_FRONTEND=noninteractive apt-get install -y linux-xanmod-x64v3 irqbalance
+DEBIAN_FRONTEND=noninteractive apt-get update -y >/dev/null 2>&1
+DEBIAN_FRONTEND=noninteractive apt-get install -y linux-xanmod-x64v3 irqbalance >/dev/null 2>&1
 if [ $? -ne 0 ]; then
-    echo -e "${RED}[!] XanMod Kernel installation failed. Check internet connection or repo status.${NC}"
+    print_error "XanMod Kernel installation failed. Check internet connection or repo status."
     # Continue anyway to apply other optimizations
 else
-    echo -e "${GREEN}[✔] XanMod Kernel installed/updated.${NC}"
+    print_success "XanMod Kernel installed/updated."
 fi
 
 # --- Step 1.1: IRQ Balancing ---
-echo -e "${YELLOW}[~] Step 1.1: Enabling IRQ Balancing...${NC}"
+print_step "1.1" "Enabling IRQ Balancing..."
 systemctl enable --now irqbalance
 
 # --- Step 1.2: RAM Disk Logging (Zero Disk I/O) ---
-echo -e "${YELLOW}[~] Step 1.2: Mounting /var/log as RAM Disk (256M)...${NC}"
+print_step "1.2" "Mounting /var/log as RAM Disk (256M)..."
 if ! grep -q "tmpfs /var/log" /etc/fstab; then
     # Ensure /var/log is not already a mount point to avoid nested mounts or errors
     if ! mountpoint -q /var/log; then
         echo "tmpfs /var/log tmpfs defaults,noatime,nosuid,nodev,noexec,mode=0755,size=256m 0 0" >> /etc/fstab
         mount /var/log || echo -e "${RED}[!] Failed to mount /var/log as tmpfs${NC}"
-        echo -e "${GREEN}[✔] /var/log mounted as tmpfs.${NC}"
+        print_success "/var/log mounted as tmpfs."
     fi
 else
-    echo -e "${GREEN}[✔] /var/log already configured as tmpfs.${NC}"
+    print_success "/var/log already configured as tmpfs."
 fi
 
 # --- Step 2: CAKE Queue Discipline ---
-echo -e "${YELLOW}[~] Step 2: Applying CAKE qdisc to ${IFACE}...${NC}"
+print_step "2/5" "Applying CAKE qdisc to ${IFACE}..."
 # Clear existing qdiscs to be safe
 tc qdisc del dev "$IFACE" root 2>/dev/null
 if tc qdisc add dev "$IFACE" root cake; then
-    echo -e "${GREEN}[✔] CAKE qdisc applied successfully.${NC}"
+    print_success "CAKE qdisc applied successfully."
 else
-    echo -e "${RED}[✘] Failed to apply CAKE qdisc (Kernel module missing?).${NC}"
+    print_error "Failed to apply CAKE qdisc (Kernel module missing?)."
 fi
 
 # --- Step 3: High-Standard Kernel Tuning (sysctl) ---
-echo -e "${YELLOW}[~] Step 3: Applying Advanced Kernel Tuning...${NC}"
+print_step "3/5" "Applying Advanced Kernel Tuning..."
 cat > /etc/sysctl.d/99-ssh-direct.conf <<EOF
 # MegaSSH High-Performance Tuning (Consolidated)
 # --- General System ---
@@ -122,25 +161,25 @@ net.ipv6.conf.lo.disable_ipv6 = 1
 EOF
 
 sysctl --system > /dev/null
-echo -e "${GREEN}[✔] Kernel parameters applied.${NC}"
+print_success "Kernel parameters applied."
 
 # --- Step 4: Hardware Optimization (RSS & RPS) ---
-echo -e "${YELLOW}[~] Step 4: Enabling RPS on ${IFACE} (All Queues)...${NC}"
+print_step "4/5" "Enabling RPS on ${IFACE} (All Queues)..."
 # Set RPS to use all CPUs (Mask 'f' assumes 4 cores, simpler than calculating bitmask for now, or use ffffffff for max coverage)
 for file in /sys/class/net/"$IFACE"/queues/rx-*/rps_cpus; do
     if [ -f "$file" ]; then
-        echo "f" > "$file" && echo -e "    ${GREEN}✔ Enabled RPS on $(basename $(dirname $file))${NC}"
+        echo "f" > "$file" && print_success "Enabled RPS on $(basename $(dirname $file))"
     fi
 done
 
 # --- Step 5: DPI Evasion (MSS Clamping) ---
-echo -e "${YELLOW}[~] Step 5: Applying DPI Evasion (MSS Clamping: 1200)...${NC}"
+print_step "5/5" "Applying DPI Evasion (MSS Clamping: 1200)..."
 # Idempotency: Check if rule exists first
 if iptables -t mangle -C POSTROUTING -o "$IFACE" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1200 2>/dev/null; then
-     echo -e "${GREEN}[✔] MSS Clamp rule already exists.${NC}"
+     print_success "MSS Clamp rule already exists."
 else
     iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1200
-    echo -e "${GREEN}[✔] MSS Clamp rule applied to POSTROUTING.${NC}"
+    print_success "MSS Clamp rule applied to POSTROUTING."
 fi
 
 # Save iptables to ensure persistence
@@ -149,7 +188,6 @@ if command -v iptables-save >/dev/null; then
     iptables-save > /etc/iptables/rules.v4
 fi
 
-echo -e "\n${GREEN}=================================================${NC}"
-echo -e "${GREEN}   OPTIMIZATION COMPLETE SUCCESFULLY             ${NC}"
-echo -e "${GREEN}=================================================${NC}"
-echo -e "${YELLOW}[!] IMPORTANT: A reboot is recommended to load the XanMod Kernel.${NC}"
+print_success "OPTIMIZATION COMPLETE SUCCESSFULLY"
+print_warn "IMPORTANT: A reboot is recommended to load the XanMod Kernel."
+echo ""
