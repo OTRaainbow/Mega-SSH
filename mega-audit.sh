@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # ==============================================================================
-# MegaSSH System Audit & Health Check
+# MegaSSH System Audit & Health Check (v6.0 - Ironclad)
+# Features: Strict File/Package Checks, Extended Geo-Blocking Tests
 # ==============================================================================
 
 GREEN='\033[0;32m'
@@ -11,29 +12,93 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 LOG_FILE="/var/log/megassh_audit.log"
-# Removed complex exec redirect to prevent shell crashes
-echo "Audit started at $(date)" >> "$LOG_FILE"
+echo "Audit started at $(date)" > "$LOG_FILE"
 
-echo -e "${CYAN}=================================================${NC}"
-echo -e "${CYAN}        MEGASSH SYSTEM AUDIT (CHECK LOG)        ${NC}"
-echo -e "${CYAN}=================================================${NC}"
-date
+print_header() {
+    echo -e "${CYAN}=================================================${NC}"
+    echo -e "${CYAN}        MEGASSH SYSTEM AUDIT (CHECK LOG)        ${NC}"
+    echo -e "${CYAN}=================================================${NC}"
+    date
+}
 
-# 1. Component Service Checks
-check_service() {
-    local name=$1
-    local port=$2
-    printf "%-30s" "[~] Checking $name ($port)..."
-    if ss -tpln | grep -q ":$port "; then
+print_status() {
+    if [ "$1" -eq 0 ]; then
         echo -e "${GREEN}[OK]${NC}"
-        return 0
     else
         echo -e "${RED}[FAILED]${NC}"
-        return 1
+        # We assume critical failures should be noted, but maybe not exit immediately 
+        # to allow seeing all failures. However, user asked for "no success message" if these fail.
+        GLOBAL_FAIL=1
     fi
 }
 
-echo -e "\n${YELLOW}--- Component Status ---${NC}"
+GLOBAL_FAIL=0
+
+print_header
+
+# --- 1. Strict File Integrity Check ---
+echo -e "\n${YELLOW}--- 1. Critical File Integrity ---${NC}"
+check_file() {
+    local file=$1
+    printf "%-40s" "[~] Checking $file..."
+    if [ -f "$file" ]; then
+        print_status 0
+    else
+        print_status 1
+        echo "Missing File: $file" >> "$LOG_FILE"
+    fi
+}
+
+# Core Scripts (assumed path relative to install or in /root/ if not specified, 
+# but usually these are in the current dir during install. We'll check current dir.)
+check_file "MegaSSH.sh"
+check_file "high_perf_optimizer.sh"
+check_file "firewall_manager.sh"
+check_file "strict_block.sh"
+check_file "MegaSSH-WARP.sh"
+check_file "useradd.py"
+check_file "UDPGW.sh"
+# Helper managers often fetched
+check_file "stunnel_manager.sh"
+check_file "shadowtls_manager.sh"
+
+# --- 2. Package & Dependency Check ---
+echo -e "\n${YELLOW}--- 2. Package Installation Status ---${NC}"
+check_pkg() {
+    local pkg=$1
+    printf "%-40s" "[~] Checking Package: $pkg..."
+    if dpkg -s "$pkg" >/dev/null 2>&1; then
+        print_status 0
+    else
+        print_status 1
+        echo "Missing Package: $pkg" >> "$LOG_FILE"
+    fi
+}
+
+check_pkg "nginx"
+check_pkg "haproxy"
+check_pkg "iptables-persistent"
+check_pkg "ipset"
+check_pkg "socat"
+check_pkg "curl"
+check_pkg "python3"
+check_pkg "irqbalance"
+# check_pkg "linux-xanmod-x64v3" # Can't strict check pkg name easily if version changes, skip for now or check uname
+
+# --- 3. Component Service Checks ---
+echo -e "\n${YELLOW}--- 3. Service Status & Ports ---${NC}"
+check_service() {
+    local name=$1
+    local port=$2
+    printf "%-40s" "[~] Checking $name ($port)..."
+    if ss -tpln | grep -q ":$port "; then
+        print_status 0
+    else
+        print_status 1
+        echo "Service Down: $name ($port)" >> "$LOG_FILE"
+    fi
+}
+
 check_service "Nginx (Decoy)" 80
 check_service "HAProxy (Multiplexer)" 443
 check_service "SSH (Internal)" 2222
@@ -42,56 +107,102 @@ check_service "ShadowTLS" 9443
 check_service "UDPGW" 7301
 check_service "Rescue SSH" 22
 
-# 2. Firewall & Geo-Block Integrity
-echo -e "\n${YELLOW}--- Firewall Integrity ---${NC}"
+# --- 4. Firewall & Geo-Block Integrity ---
+echo -e "\n${YELLOW}--- 4. Firewall Integrity ---${NC}"
 
 # Check IPSet
 IR_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
 RU_CN_COUNT=$(ipset list country_block_in 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
 
-printf "%-30s" "[~] IPSet (Iran Block)..."
-if [ "$IR_COUNT" -gt 100 ]; then echo -e "${GREEN}[OK] ($IR_COUNT IPs)${NC}"; else echo -e "${RED}[EMPTY]${NC}"; fi
+printf "%-40s" "[~] IPSet (Outbound Block)..."
+if [ -n "$IR_COUNT" ] && [ "$IR_COUNT" -gt 0 ]; then
+    echo -e "${GREEN}[OK] ($IR_COUNT IPs)${NC}"
+else
+    echo -e "${RED}[FAILED/EMPTY]${NC}"
+    GLOBAL_FAIL=1
+fi
 
-printf "%-30s" "[~] IPSet (RU/CN Block)..."
-if [ "$RU_CN_COUNT" -gt 100 ]; then echo -e "${GREEN}[OK] ($RU_CN_COUNT IPs)${NC}"; else echo -e "${RED}[EMPTY]${NC}"; fi
+printf "%-40s" "[~] IPSet (Inbound Block)..."
+if [ -n "$RU_CN_COUNT" ] && [ "$RU_CN_COUNT" -gt 0 ]; then
+    echo -e "${GREEN}[OK] ($RU_CN_COUNT IPs)${NC}"
+else
+    echo -e "${RED}[FAILED/EMPTY]${NC}"
+    GLOBAL_FAIL=1
+fi
+
+# Check Strict Block IPTables Rules
+printf "%-40s" "[~] Strict DROP Rules (OUTPUT)..."
+if iptables -L OUTPUT -n | grep -q "DROP.*country_block_out"; then
+    echo -e "${GREEN}[ACTIVE]${NC}"
+else
+    echo -e "${RED}[MISSING]${NC}"
+    GLOBAL_FAIL=1
+fi
 
 # Check IPv6
-printf "%-30s" "[~] IPv6 Status..."
-IPV6_STATUS=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6)
-if [ "$IPV6_STATUS" -eq 1 ]; then echo -e "${GREEN}[DISABLED]${NC}"; else echo -e "${RED}[LEAKING]${NC}"; fi
+printf "%-40s" "[~] IPv6 Status..."
+IPV6_STATUS=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)
+if [ "$IPV6_STATUS" == "1" ]; then
+    echo -e "${GREEN}[DISABLED]${NC}"
+else
+    echo -e "${RED}[LEAKING]${NC}"
+    GLOBAL_FAIL=1
+fi
 
-# 3. Live Connectivity Tests (The "Real World" Test)
-echo -e "\n${YELLOW}--- Live Geo-Blocking Test ---${NC}"
+# --- 5. Extended Live Geo-Blocking Tests ---
+echo -e "\n${YELLOW}--- 5. Extended Geo-Blocking Test (Ping/Curl) ---${NC}"
+echo -e "${CYAN}Testing strict outbound blocking (Should FAIL to connect)${NC}"
 
 test_block() {
     local site=$1
-    local ip=$2
-    printf "%-30s" "[~] Testing $site..."
-    # We use --resolve to bypass DNS issues during the test
-    if curl -m 3 -s -I --resolve "$site:80:$ip" "http://$site" > /dev/null 2>&1; then
-        echo -e "${RED}[FAILED - SITE OPENED]${NC}"
+    local name=$2
+    # Resolve typically handled by curl, but we can rely on standard DNS behavior here or force if we had IPs.
+    # Using domain names to replicate user behavior.
+    printf "%-40s" "[~] Testing $name ($site)..."
+    
+    # Timeout 3s. If it connects (0), we failed. If it times out (28) or can't connect (7), we succeeded.
+    curl -m 3 -s -I "http://$site" > /dev/null 2>&1
+    local ret=$?
+    
+    if [ $ret -eq 0 ]; then
+        echo -e "${RED}[FAILED - CONNECTED]${NC}"
+        GLOBAL_FAIL=1
+        echo "GeoBlock Failed: $site was accessible" >> "$LOG_FILE"
     else
-        echo -e "${GREEN}[SUCCESS - BLOCKED]${NC}"
+        echo -e "${GREEN}[BLOCKED] (Code: $ret)${NC}"
     fi
 }
 
-# Real target IPs from RU/CN/IR
-test_block "vk.com (Russia)" "87.240.139.194"
-test_block "baidu.com (China)" "110.242.68.66"
-test_block "digikala.com (Iran)" "185.239.104.14"
+echo -e "\n${YELLOW}>> Block Russia (RU)${NC}"
+test_block "vk.com" "VKontakte"
+test_block "mail.ru" "Mail.ru"
+test_block "yandex.ru" "Yandex"
+test_block "ok.ru" "Odnoklassniki"
+test_block "gosuslugi.ru" "Gosuslugi"
 
-# 4. Final Verdict
+echo -e "\n${YELLOW}>> Block China (CN)${NC}"
+test_block "baidu.com" "Baidu"
+test_block "qq.com" "QQ"
+test_block "taobao.com" "Taobao"
+test_block "weibo.com" "Weibo"
+test_block "360.cn" "360 Security"
+
+echo -e "\n${YELLOW}>> Block Iran (IR)${NC}"
+test_block "digikala.com" "Digikala"
+test_block "varzesh3.com" "Varzesh3"
+test_block "aparat.com" "Aparat"
+test_block "shaparak.ir" "Shaparak"
+test_block "divar.ir" "Divar"
+
+# --- 6. Final Verdict ---
 echo -e "\n${CYAN}=================================================${NC}"
-echo -e "${GREEN}      ALL COMPONENTS VERIFIED & CORRECT        ${NC}"
-echo -e "${CYAN}=================================================${NC}"
-echo -e "${YELLOW}Audit Complete. Log saved to: $LOG_FILE${NC}"
-echo -e "${CYAN}=================================================${NC}"
-
-echo -e "\n${RED}[!] IMPORTANT: System changes require a reboot to be 100% effective.${NC}"
-read -p "Would you like to REBOOT the server now? (y/n): " confirm
-if [[ "$confirm" == [yY] ]]; then
-    echo -e "${GREEN}[+] Rebooting... Please wait 1-2 minutes before reconnecting.${NC}"
-    reboot
+if [ "$GLOBAL_FAIL" -eq 1 ]; then
+    echo -e "${RED}      AUDIT FAILED - CRITICAL ISSUES FOUND       ${NC}"
+    echo -e "${RED}      Check $LOG_FILE for details.               ${NC}"
+    echo -e "${CYAN}=================================================${NC}"
+    exit 1
 else
-    echo -e "${YELLOW}[!] Please manualy reboot when possible.${NC}"
+    echo -e "${GREEN}      ALL SYSTEMS GREEN - INSTALLATION PERFECT   ${NC}"
+    echo -e "${CYAN}=================================================${NC}"
+    exit 0
 fi

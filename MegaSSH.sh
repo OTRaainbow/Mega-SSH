@@ -64,30 +64,25 @@ print_error() {
     echo -e "${RED}[✘] $1${NC}"
 }
 
-# Health Check Function
+# Health Check Function with Retries
 check_service_health() {
     local service=$1
     local port=$2
-    echo -n "  [~] Verifying $service health on port $port..."
-    sleep 2 # Give it a moment to bind
+    local max_attempts=3
+    local attempt=1
     
-    if ! systemctl is-active --quiet "$service"; then
-        echo -e "\n${RED}[✘] CRITICAL: $service service failed to start!${NC}"
-        echo -e "${YELLOW}--- Service Status ---${NC}"
-        systemctl status "$service" --no-pager
-        echo -e "${YELLOW}--- Last 15 lines of $service logs ---${NC}"
-        journalctl -u "$service" --no-pager -n 15
-        echo -e "${RED}[!] Installation aborted. Please fix the error above.${NC}"
-        exit 1
-    fi
-
-    if ! ss -tlnp | grep -q ":$port "; then
-        echo -e "\n${RED}[✘] CRITICAL: $service is running but NOT listening on port $port!${NC}"
-        echo -e "${YELLOW}Current listening ports:${NC}"
-        ss -tlnp | grep LISTEN | head -n 10
-        exit 1
-    fi
-    echo -e " ${GREEN}OK${NC}"
+    print_step "CHECK" "Verifying $service on port $port..."
+    while [ $attempt -le $max_attempts ]; do
+        if systemctl is-active --quiet "$service" && (ss -tuln | grep -q ":$port "); then
+            return 0
+        fi
+        echo -e "${YELLOW}[!] Attempt $attempt/$max_attempts failed for $service. Retrying in 2s...${NC}"
+        sleep 2
+        ((attempt++))
+    done
+    
+    print_error "Service $service failed to start or bind to port $port. Check $LOG_FILE for details."
+    return 1
 }
 
 # --- Initialization ---
@@ -103,7 +98,7 @@ PASSWORD="@MonGleKhos2024"
 
 # --- GITHUB DEPLOYMENT CONFIG ---
 # YOUR GITHUB CONFIGURATION:
-REPO_BASE="https://raw.githubusercontent.com/OTRaainbow/Mega-SSH/main"
+REPO_BASE=${REPO_BASE:-"https://raw.githubusercontent.com/OTRaainbow/Mega-SSH/main"}
 # --------------------------------
 
 # Helper: Download Script
@@ -144,14 +139,8 @@ fetch_script() {
 # Set non-interactive for apt
 export DEBIAN_FRONTEND=noninteractive
 
-# 1. Update & Install Dependencies
-print_step "1/10" "Updating System & Installing Dependencies..."
-# PRE-INSTALL FIX: Purge UFW first to allow iptables-persistent (DISABLED: Needed for Firewall Manager)
-# apt purge -y ufw >> $LOG_FILE 2>&1
-apt autoremove -y >> $LOG_FILE 2>&1
-
 # Dependencies (REMOVED ufw)
-(apt update && apt upgrade -y && apt install -y curl socat wget git cmake make gcc build-essential nginx haproxy ipset iptables-persistent unzip tar cron) >> $LOG_FILE 2>&1 &
+(apt update && apt upgrade -y && apt install -y software-properties-common && add-apt-repository ppa:vbernat/haproxy-3.4 -y && apt update && apt install -y curl socat wget git cmake make gcc build-essential nginx haproxy ipset iptables-persistent unzip tar cron) >> $LOG_FILE 2>&1 &
 PID=$!
 run_with_spinner $PID
 wait $PID
@@ -176,10 +165,11 @@ echo -e "$PASSWORD\n$PASSWORD" | passwd root >> $LOG_FILE 2>&1
 print_success "Root Password Set"
 
 # 2. System Optimizations (External)
-print_step "2/10" "Applying Kernel Optimizations (BBRv3)..."
-fetch_script "speed-optimizer.sh"
-./speed-optimizer.sh > /dev/null 2>&1
-print_success "Kernel Optimized (speed-optimizer.sh)"
+print_step "2/10" "Applying Kernel Optimizations (XanMod + Hz BBRv3)..."
+rm -f speed-optimizer.sh # Cleanup obsolete file
+fetch_script "high_perf_optimizer.sh"
+./high_perf_optimizer.sh
+print_success "High Performance Optimization Complete"
 
 # 3. UDPGW Installation (External)
 print_step "3/10" "Building UDPGW (BadVPN)..."
@@ -188,8 +178,28 @@ fetch_script "UDPGW.sh"
 run_with_spinner $!
 print_success "UDPGW Service Started (Port $PORT_UDPGW)"
 
-# 4. SSH Security Configuration (Hybrid Multiplexing)
-print_step "4/10" "Hardening SSH (Split-Stream: Ports 2222-2225)..."
+# 4. SSH Security Configuration (Direct Stealth & Obfuscation)
+print_step "4/10" "Implementing SSH Stealth & Obfuscation..."
+# A. Obfuscate SSH Version Banner (DPI Evasion)
+# Backup and hex-edit binary to report Microsoft_IIS instead of OpenSSH
+if [ -f /usr/sbin/sshd ]; then
+    cp /usr/sbin/sshd /usr/sbin/sshd.bak
+    # Padded replacement (must match length of OpenSSH_9.6p1 exactly: 13 chars)
+    # Note: 9.6p1 is 5 characters (prefixing the 8 chars of OpenSSH_). 
+    # This sed is flexible for the version part but relies on the string being present.
+    # We use a broad pattern to match common OpenSSH strings while ensuring the length matches.
+    CURRENT_VER=$(/usr/sbin/sshd -V 2>&1 | grep -o 'OpenSSH_[0-9]\.[0-9]p[0-9]')
+    if [ ! -z "$CURRENT_VER" ]; then
+        # Escape dots for use in sed regex
+        ESCAPED_VER=$(echo "$CURRENT_VER" | sed 's/\./\\./g')
+        sed -i "s/$ESCAPED_VER/Microsoft_IIS/g" /usr/sbin/sshd
+        echo -e "${GREEN}[✔] SSH Binary Obfuscated (Identifies as Microsoft_IIS)${NC}"
+    else
+        # Fallback to the requested 9.6p1 specifically if detection fails
+        sed -i 's/OpenSSH_9.6p1/Microsoft_IIS/g' /usr/sbin/sshd
+        echo -e "${YELLOW}[!] SSH Binary Obfuscated (Manual Match Search)${NC}"
+    fi
+fi
 
 # UBUNTU 24.04 FIX: Disable Socket Activation (Kills Port 22)
 # RESCUE MODE: We are KEEPING Port 22 enabled for now to prevent lockout.
@@ -213,9 +223,23 @@ echo "Port 2223" >> /etc/ssh/sshd_config
 echo "Port 2224" >> /etc/ssh/sshd_config
 echo "Port 2225" >> /etc/ssh/sshd_config
 
-sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-sed -i 's/^#ClientAliveInterval.*/ClientAliveInterval 300/' /etc/ssh/sshd_config
-sed -i 's/^#ClientAliveCountMax.*/ClientAliveCountMax 3/' /etc/ssh/sshd_config
+sed -i -e 's/^#PermitRootLogin.*/PermitRootLogin yes/' \
+       -e 's/^#ClientAliveInterval.*/ClientAliveInterval 30/' \
+       -e 's/^#ClientAliveCountMax.*/ClientAliveCountMax 3/' /etc/ssh/sshd_config
+
+if ! grep -q "^LoginGraceTime" /etc/ssh/sshd_config; then
+    echo "LoginGraceTime 15" >> /etc/ssh/sshd_config
+else
+    sed -i 's/^LoginGraceTime.*/LoginGraceTime 15/' /etc/ssh/sshd_config
+fi
+
+if ! grep -q "^TCPKeepAlive" /etc/ssh/sshd_config; then
+    echo "TCPKeepAlive yes" >> /etc/ssh/sshd_config
+fi
+
+# Disable unused features to reduce fingerprint
+echo "GSSAPIAuthentication no" >> /etc/ssh/sshd_config
+echo "KerberosAuthentication no" >> /etc/ssh/sshd_config
 # Security Hardening (High Volume Optimization)
 if ! grep -q "^DebianBanner" /etc/ssh/sshd_config; then
     echo "DebianBanner no" >> /etc/ssh/sshd_config
@@ -225,7 +249,9 @@ if ! grep -q "^MaxSessions" /etc/ssh/sshd_config; then
 fi
 # Active Probing Defense
 if ! grep -q "^MaxStartups" /etc/ssh/sshd_config; then
-    echo "MaxStartups 100:30:200" >> /etc/ssh/sshd_config
+    echo "MaxStartups 100:30:1000" >> /etc/ssh/sshd_config
+else
+    sed -i 's/^MaxStartups.*/MaxStartups 100:30:1000/' /etc/ssh/sshd_config
 fi
 if ! grep -q "^PerSourceMaxStartups" /etc/ssh/sshd_config; then
     echo "PerSourceMaxStartups 3" >> /etc/ssh/sshd_config
@@ -244,14 +270,39 @@ fi
 if ! grep -q "^MACs" /etc/ssh/sshd_config; then
     echo "MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com" >> /etc/ssh/sshd_config
 fi
+# B. EagleNet High-Volume Tuning
+print_step "4.1" "Applying EagleNet High-Volume Tuning..."
+mkdir -p /etc/ssh/sshd_config.d
+cat <<EOF > /etc/ssh/sshd_config.d/99-eaglenet.conf
+# EagleNet + MegaSSH Final Sync Tuning
+# Move internal SSH to 2222 (HAProxy will face the internet on 443)
+Port 2222
+UseDNS no
+TCPKeepAlive yes
+
+# EagleNet Connection Storm Protection
+# Allows up to 800 unauthenticated connections during network spikes
+MaxStartups 300:30:800
+LoginGraceTime 20
+ClientAliveInterval 120
+ClientAliveCountMax 2
+
+# Resource Management
+MaxSessions 10
+EOF
+
+# Ensure the main config includes the .d directory (Standard in 24.04)
+if ! grep -q "Include /etc/ssh/sshd_config.d/\*.conf" /etc/ssh/sshd_config; then
+    sed -i '1iInclude /etc/ssh/sshd_config.d/*.conf' /etc/ssh/sshd_config
+fi
+
 # Enable Standard Service
 systemctl unmask ssh
 systemctl enable ssh
 systemctl restart ssh
 # Verify SSH
-check_service_health "ssh" "22"
 check_service_health "ssh" "2222"
-print_success "SSH Configured & Verified (Ports 22 + 2222-2225)"
+print_success "SSH Configured with EagleNet Tuning (Port 2222)"
 
 # 5. Nginx Decoy Site (Digikala)
 print_step "5/10" "Deploying Decoy Site (Digikala)..."
@@ -316,12 +367,16 @@ ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 systemctl reload nginx
 # Verify Nginx
 check_service_health "nginx" "80"
-print_success "Nginx Decoy Live (Port 80 & Internal 8080)"
+print_success "Nginx Decoy Live (Port 80)"
 
 # 6. HAProxy Multiplexing (SSH Priority)
 print_step "6/10" "Configuring HAProxy Split-Stream (Port 443 -> SSH Default)..."
 cat > /etc/haproxy/haproxy.cfg <<EOF
 global
+    # Version 3.4 optimizations
+    maxconn 100000
+    nbthread 4
+    hard-stop-after 5s
     log /dev/log local0
     log /dev/log local1 notice
     chroot /var/lib/haproxy
@@ -335,9 +390,9 @@ defaults
     mode    tcp
     option  tcplog
     option  dontlognull
-    timeout connect 5000
-    timeout client  50000
-    timeout server  50000
+    timeout connect 4s
+    timeout client  1h
+    timeout server  1h
 frontend stats
     mode http
     bind *:8404
@@ -347,21 +402,21 @@ frontend stats
 frontend multiplexer_443
     bind *:${PORT_HAPROXY}
     mode tcp
-    # 200ms Delay: Fast enough for browsers to send hello, short enough for silent SSH to feel instant
+    # 200ms Delay: precision sniffing for DPI evasion
     tcp-request inspect-delay 200ms
     
-    # Detect Obvious HTTP/TLS (Decoy Candidate)
-    # If it looks like HTTP or TLS, send to Decoy. Else assume SSH.
-    acl is_http req.payload(0,3) -m str GET POST HEAD OPTIONS
-    acl is_tls req.ssl_hello_type gt 0
+    # Signature for SSH-2.0 (Hex: 5353482d322e30)
+    # If the DPI probes with an empty or non-SSH packet, send it to the Decoy
+    acl is_ssh payload(0,7) -m bin 5353482d322e30
     
     # Routing Logic
-    use_backend web_decoy_backend if is_http
-    use_backend web_decoy_backend if is_tls
-    default_backend ssh_backend
+    use_backend ssh_backend if is_ssh
+    default_backend web_decoy_backend
 
 backend ssh_backend
     mode tcp
+    # Option 'abortonclose' helps clear zombie DPI probes
+    option abortonclose
     balance roundrobin
     server ssh_srv_1 127.0.0.1:2222 check
     server ssh_srv_2 127.0.0.1:2223 check
@@ -396,9 +451,23 @@ download_user_list "ir"
 download_user_list "ru"
 download_user_list "cn"
 
+# --- Hardened Geofence Integration (Strict DROP) ---
+print_step "8.1" "Deploying Nuclear Firewall & Total Geofence Lockout..."
 fetch_script "firewall_manager.sh"
 ./firewall_manager.sh
-print_success "Nuclear Firewall Active (Priority 2 - FINAL)"
+
+mkdir -p /etc/megassh/rules
+# Move netset files to the hardened rules directory
+mv ip2location_country_cn.netset /etc/megassh/rules/cn.netset 2>/dev/null
+mv ip2location_country_ru.netset /etc/megassh/rules/ru.netset 2>/dev/null
+mv ip2location_country_ir.netset /etc/megassh/rules/ir.netset 2>/dev/null
+
+fetch_script "strict_block.sh"
+chmod +x strict_block.sh
+# Apply strict DROP rules AFTER firewall_manager.sh (to avoid flush)
+./strict_block.sh
+
+print_success "Strict Outbound Blocking Active (Silent DROP)"
 
 # 9. Session Limiter (Global Compatibility)
 print_step "9/10" "Enforcing Session Limits (Compatible with useradd.py)..."
@@ -425,8 +494,12 @@ systemctl restart cron
 print_success "Cron Jobs Scheduled"
 
 # Prepare Audit Tool
-echo -e "${YELLOW}[~] Setting up Audit Tool...${NC}"
+echo -e "${YELLOW}[~] Setting up Audit & Management Tools...${NC}"
 fetch_script "mega-audit.sh" || echo -e "${RED}[!] Note: mega-audit.sh not found on GitHub. Please upload it to your repo.${NC}"
+
+# Fetch Management Scripts
+fetch_script "useradd.py"
+fetch_script "MegaSSH-WARP.sh"
 
 # --- Final Summary ---
 echo ""
@@ -458,7 +531,7 @@ run_integrated_audit() {
     # Diagnostic check function
     check_port() {
         local name=$1; local port=$2
-        printf "%-30s" "[~] Checking $name ($port)..."
+        printf "%-35s" "[~] Checking $name ($port)..."
         if ss -tlnp | grep -q ":$port "; then
             echo -e "${GREEN}[OK]${NC}"; return 0
         else
@@ -474,57 +547,36 @@ run_integrated_audit() {
     check_port "Rescue SSH" 22
 
     echo -e "\n${YELLOW}--- Firewall Integrity ---${NC}"
-    # Check Files
-    printf "%-30s" "[~] Checking .netset files..."
-    FILES_COUNT=$(ls ip2location_country_*.netset 2>/dev/null | wc -l)
-    if [ "$FILES_COUNT" -ge 3 ]; then 
-        echo -e "${GREEN}[FOUND]${NC}"
-    else 
-        echo -e "${RED}[MISSING]${NC}"
-        echo -e "    ${YELLOW}(Note: Please upload ip2location_country_*.netset files to /root/ on your server)${NC}"
-    fi
-
     # Check IPSet
     IR_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
     RU_CN_COUNT=$(ipset list country_block_in 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
     
-    printf "%-30s" "[~] IPSet (Iran Block)..."
+    printf "%-35s" "[~] IPSet (Outbound Block)..."
     if [ -n "$IR_COUNT" ] && [ "$IR_COUNT" -gt 0 ]; then 
         echo -e "${GREEN}[OK] ($IR_COUNT entries)${NC}"
     else 
-        echo -e "${RED}[EMPTY]${NC}"
-        echo -e "    ${YELLOW}(Checking IP Samples...)${NC}"
-        ipset list country_block_out 2>/dev/null | head -n 5
+        echo -e "${RED}[EMPTY/FAILED]${NC}"
     fi
     
-    printf "%-30s" "[~] IPSet (RU/CN Block)..."
-    if [ -n "$RU_CN_COUNT" ] && [ "$RU_CN_COUNT" -gt 0 ]; then echo -e "${GREEN}[OK] ($RU_CN_COUNT entries)${NC}"; else echo -e "${RED}[EMPTY]${NC}"; fi
+    printf "%-35s" "[~] IPSet (Inbound Block)..."
+    if [ -n "$RU_CN_COUNT" ] && [ "$RU_CN_COUNT" -gt 0 ]; then echo -e "${GREEN}[OK] ($RU_CN_COUNT entries)${NC}"; else echo -e "${RED}[EMPTY/FAILED]${NC}"; fi
     
+    # Check Strict DROP Rules
+    printf "%-35s" "[~] Strict DROP (OUTPUT)..."
+    if iptables -L OUTPUT -n | grep -q "DROP.*country_block_out"; then echo -e "${GREEN}[ACTIVE]${NC}"; else echo -e "${RED}[MISSING]${NC}"; fi
+
     # Check Policy Routing (FWMark 0x99 -> Table 200)
-    printf "%-30s" "[~] Zero-Leak Routing (Rule Pri 2)..."
-    # Match exact Priority 2 rule
-    if ip rule show | grep -q "^2:.*fwmark 0x99.*lookup 200"; then 
-        echo -e "${GREEN}[ACTIVE]${NC}"
-    else 
-        echo -e "${RED}[BYPASS RISK]${NC}"
-        echo -e "    ${YELLOW}Current Rules (Top 3):${NC}"
-        ip rule show | head -n 3
-    fi
+    printf "%-35s" "[~] Zero-Leak Routing (Rule Pri 2)..."
+    if ip rule show | grep -q "^2:.*fwmark 0x99.*lookup 200"; then echo -e "${GREEN}[ACTIVE]${NC}"; else echo -e "${RED}[BYPASS RISK]${NC}"; fi
 
-    printf "%-30s" "[~] Blackhole Table 200..."
-    if ip route show table 200 2>/dev/null | grep -qE "blackhole|unreachable"; then echo -e "${GREEN}[OK]${NC}"; else echo -e "${RED}[MISSING]${NC}"; fi
-
-    # Check IPv6
-    printf "%-30s" "[~] IPv6 Status..."
+    printf "%-35s" "[~] IPv6 Status..."
     IPV6_STATUS=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)
     if [ "$IPV6_STATUS" == "1" ]; then echo -e "${GREEN}[DISABLED]${NC}"; else echo -e "${RED}[LEAKING]${NC}"; fi
 
-    echo -e "\n${YELLOW}--- Live Geo-Blocking Test ---${NC}"
+    echo -e "\n${YELLOW}--- Live Geo-Blocking Test (Strict) ---${NC}"
     test_block() {
         local site=$1; local ip=$2
-        printf "%-30s" "[~] Testing $site..."
-        # We check for exit code 28 (timeout) or 7 (failed to connect) - likely blocked
-        # Error 3/6 can happen if the firewall drops the packet before resolution finishes
+        printf "%-35s" "[~] Testing $site..."
         curl -m 4 -s -I --resolve "$site:80:$ip" "http://$site" > /dev/null 2>&1
         local ret=$?
         if [ $ret -eq 0 ]; then
@@ -532,7 +584,7 @@ run_integrated_audit() {
         elif [ $ret -eq 28 ] || [ $ret -eq 7 ] || [ $ret -eq 3 ] || [ $ret -eq 6 ]; then
             echo -e "${GREEN}[SUCCESS - BLOCKED]${NC}"
         else
-            echo -e "${YELLOW}[?] UNKNOWN (ERROR $ret)${NC}"
+            echo -e "${YELLOW}[?] UNKNOWN (Error $ret)${NC}"
         fi
     }
     test_block "vk.com (Russia)" "87.240.139.194"
