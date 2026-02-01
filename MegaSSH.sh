@@ -210,14 +210,18 @@ ExecReload=/bin/kill -USR2 \$MAINPID
 KillMode=mixed
 Restart=always
 Type=notify
+RuntimeDirectory=haproxy
+RuntimeDirectoryMode=0755
 
 [Install]
 WantedBy=multi-user.target
 EOF
     systemctl daemon-reload
     mkdir -p /etc/haproxy
+    # /var/lib/haproxy is handled by chroot
     mkdir -p /var/lib/haproxy
-    useradd -r haproxy 2>/dev/null
+    groupadd -f -r haproxy
+    useradd -r -g haproxy -s /bin/false -d /var/lib/haproxy haproxy 2>/dev/null
     print_success "HAProxy 3.3.2 Compiled & Installed"
     cd /root
 else
