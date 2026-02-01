@@ -82,23 +82,69 @@ else
     mkdir -p /etc/apt/keyrings
     rm -f /etc/apt/keyrings/xanmod-archive-keyring.gpg
     
-    # Download header to temp file to verify success
-    wget -q -O /tmp/xanmod.key https://dl.xanmod.org/archive.key
+    print_info "Registering XanMod Repository..."
+    mkdir -p /etc/apt/keyrings
+    rm -f /etc/apt/keyrings/xanmod-archive-keyring.gpg
     
+    # Embed Key Directly (Bypass Network Download Issues)
+    cat <<EOF > /tmp/xanmod.key
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+Comment: Hostname: 
+Version: Hockeypuck 2.2
+
+xsBNBFhxW04BCAC61HuxBVf1XJiQjXu/DSAtVcnuK38geDoDjcqFtHskFy32NgJG
+X118EFNym6noF+oibaSftI9yjHthWvMnYZ/+DPwd7YZhbAjBvxMIQCsP6cFVxrgc
+VV8g+uh4TCfbpalDBFoncRhQCgkmDN9Vd4kIWRh6BHJuzpKB/h2KxUHZVEKgWlK2
+dR1xUtbrc+kp8gLwPbxTgC3tZ4x2uMMMlnbyCMSRa5oJ/AvoW4W1XphKL9ivsFHM
+PSQkUBDvgv2RPw+0XBxPy8SYE0r0onx0ZIpjJRTODt3bSV6/0owwlpNogV9bT8HY
+kl3+w3mTwax6S1akHZuJtLkZS0uUBz1BHt5bABEBAAHNIVhhbk1vZCBLZXJuZWwg
+PGtlcm5lbEB4YW5tb2Qub3JnPsLAdwQTAQgAIQUCWHFbTgIbAwULCQgHAgYVCAkK
+CwIEFgIDAQIeAQIXgAAKCRCG99Ce5zTmIwTmB/9/S4rmwU6efDgEaBDwBDbOfLBA
+P2+kDpabjG4K+V4NSvDqlPN49KrI7C21jHghAa2VuTPbSZVQ9ziUd5DjX9OuXov8
+CYVG+rrlG1UadHS8SBpgw0gNylEvo9/U6u0hl8mrbVOlpzu+eE+e4cMTHax2y580
+fC2xmnM8wKgyRFEyVc6ilWU+UNTAeUFlg0YfU3cV1Ut4DzVFfamtNYg0p7Q/9MSy
+VgFpt5C2U5prk4wi++51OgrtaNhMrUhzYXLINWVF6IrXhQ+mkI/FWXUZ0oyVo55v
++dQzuds/gos90q+tKyE514pYAmwQSftSjf+RmHOMpPQyMZZKSywrz4vlfveDzsBN
+BFhxW04BCACs5bXq73MDb2+AsvNL2XkkbnzmE4K3k0gejB9OxrO+puAZn3wWyYIk
+b0Op8qVUh+/FIiW/uFfmdFD8BypC3YkCNfg6e74f5TT3qQciccpMGy62teo3jfhT
+T8E1OL1i76ALq7eNbByJKiKLBrTUDM6BDIeRZBWXQMase4+aqUAP47Kd/ByPsmCh
+/pzb6yPdDPKwkspELssdPXYI7enddjQsCPoBko0j8CTPgKqMTeCuKMXCtD2gtRBN
+eoVj4cbjZoZvBh8oJktzbYA8FX8eKdxIXhSP9MoVOPSWhxIQdwzkzUPK+0vUV8jA
+NBTnGOkrRJPOHGPJWFWnTUGrzvcwi7czABEBAAHCwF8EGAEIAAkFAlhxW04CGwwA
+CgkQhvfQnuc05iMIswgAmzSpCHFGKdkFLdC673FidJcL8adKFTO5Mpyholc5N8vG
+ROJbpso+DpssF14NKoBfBWqPRgHxYzHakxHiNf0R2+EEwXH3rblzpx3PXzB0OgNe
+T9T0UStrGgc9nZ8nZVURHZZ2z5zakEWS+rB2TiSxz3YArR3wiTHQW49G09uZvfp6
+5Mim2w+eUxbQ689eT0DlDI1d2eDP/j5lrv1elsg3kBE2Awzdvi8DdGUpMFrSsYJw
+WS85uZrwbeAs/nPO62wNIvAbbRsWnDg3AV3vc02eRvy52tTBY1W/67N02M4AxgPd
+ukDDFZMifwa03yTHD/a57O4dFOnzsEVojBnbzQ7W7w==
+=Lvp8
+-----END PGP PUBLIC KEY BLOCK-----
+EOF
+
     if [ -s "/tmp/xanmod.key" ]; then
         # Check if it looks like a key (simple check) or just let gpg handle it
         gpg --dearmor -o /etc/apt/keyrings/xanmod-archive-keyring.gpg /tmp/xanmod.key 2>/dev/null
         
         if [ -s "/etc/apt/keyrings/xanmod-archive-keyring.gpg" ]; then
-            echo 'deb [signed-by=/etc/apt/keyrings/xanmod-archive-keyring.gpg] http://deb.xanmod.org releases main' | tee /etc/apt/sources.list.d/xanmod-release.list
-            print_success "XanMod GPG Key & Repo Registered."
+            # Use lsb_release if available, otherwise fallback to 'releases' or 'noble'
+            if command -v lsb_release >/dev/null; then
+                CODENAME=$(lsb_release -sc)
+            elif [ -f /etc/os-release ]; then
+                . /etc/os-release
+                CODENAME=$VERSION_CODENAME
+            else
+                CODENAME="releases"
+            fi
+            
+            echo "deb [signed-by=/etc/apt/keyrings/xanmod-archive-keyring.gpg] http://deb.xanmod.org ${CODENAME} main" | tee /etc/apt/sources.list.d/xanmod-release.list
+            print_success "XanMod GPG Key & Repo Registered (Source: $CODENAME)."
         else
-            print_error "Invalid GPG Key downloaded (gpg failed to dearmor)."
-            cat /tmp/xanmod.key | head -n 5 # Show what we got (might be HTML error)
+            print_error "Invalid GPG Key downloaded/embedded (gpg failed to dearmor)."
+            cat /tmp/xanmod.key | head -n 5 
         fi
         rm -f /tmp/xanmod.key
     else
-        print_error "Failed to download XanMod GPG Key (Connection failed or empty file)."
+        print_error "Failed to write embedded XanMod GPG Key."
     fi
 fi
 
