@@ -81,8 +81,29 @@ systemctl enable --now pingtunnel
 print_success "Pingtunnel service targeting port ${TARGET_PORT} started."
 
 # 5. Final Verification
+SERVER_IP=$(curl -s https://api.ipify.org || curl -s https://ifconfig.me)
 if systemctl is-active --quiet pingtunnel; then
-    print_success "Pingtunnel is ACTIVE."
+    print_success "Pingtunnel is ACTIVE (Server IP: ${SERVER_IP})"
 else
     print_error "Pingtunnel FAILED to start. Check 'journalctl -u pingtunnel'."
 fi
+
+# 6. Antigravity UI: Final Mapping (Transparent Tunnel)
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+BCYAN='\033[1;36m'
+NC='\033[0m'
+
+echo ""
+echo -e "${CYAN}◈ SSH DIRECT CONFIGURATION (TRANSPARENT TUNNEL)${NC}"
+echo -e "  ${PURPLE}│${NC}"
+echo -e "  ${PURPLE}├─${NC} ${WHITE}Local Entrance:${NC}  ${CYAN}127.0.0.1:443${NC}"
+echo -e "  ${PURPLE}├─${NC} ${WHITE}Transport:${NC}       ${CYAN}ICMP Stealth Tunnel${NC}"
+echo -e "  ${PURPLE}├─${NC} ${WHITE}Remote Target:${NC}   ${CYAN}Server:443${NC}"
+echo -e "  ${PURPLE}│${NC}"
+echo -e "  ${PURPLE}╰─>${NC} ${WHITE}Client Command (Sudo Required):${NC}"
+echo -e "      ${BCYAN}sudo ./pingtunnel -type client -l :443 -s ${SERVER_IP} -t 127.0.0.1:443 -key ${PINGTUNNEL_KEY}${NC}"
+echo ""
+echo -e "${PURPLE}╰─>${NC} ${WHITE}Final Connection:${NC} ${BCYAN}ssh root@127.0.0.1 -p 443${NC}"
+echo ""

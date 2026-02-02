@@ -589,24 +589,36 @@ fetch_script "useradd.py"
 fetch_script "MegaSSH-WARP.sh"
 
 # --- Final Summary ---
-# --- Final Summary ---
+SERVER_IP=$(curl -s https://api.ipify.org || curl -s https://ifconfig.me)
+PINGTUNNEL_KEY="123456" # Matching pingtunnel_manager.sh
+
 echo ""
 echo -e "${BBLUE}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BBLUE}║${NC} ${BGREEN}                  INSTALLATION COMPLETE SUCCESSFULLY                         ${BBLUE}║${NC}"
 echo -e "${BBLUE}╠═════════════════════════════════════════════════════════════════════════════╣${NC}"
 echo -e "${BBLUE}║${NC} ${BYELLOW}Connection Details:${NC}                                                         ${BBLUE}║${NC}"
-echo -e "${BBLUE}║${NC}   • ${BCYAN}Direct SSH:${NC}    YourIP:443                                             ${BBLUE}║${NC}"
-echo -e "${BBLUE}║${NC}   • ${BRED}Rescue SSH:${NC}    YourIP:22 (Temp Enabled)                               ${BBLUE}║${NC}"
-echo -e "${BBLUE}║${NC}   • ${BCYAN}SSL Wrapped:${NC}   YourIP:8443 (via Stunnel)                              ${BBLUE}║${NC}"
-echo -e "${BBLUE}║${NC}   • ${BCYAN}Pingtunnel:${NC}    YourIP (via ICMP -> Port 443)                          ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC}   • ${BCYAN}Direct SSH:${NC}    ${SERVER_IP}:443                                          ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC}   • ${BRED}Rescue SSH:${NC}    ${SERVER_IP}:22 (Temp Enabled)                            ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC}   • ${BCYAN}SSL Wrapped:${NC}   ${SERVER_IP}:8443 (via Stunnel)                           ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC}   • ${BCYAN}ICMP Stealth:${NC}  ${SERVER_IP} (via Pingtunnel)                                ${BBLUE}║${NC}"
 echo -e "${BBLUE}║${NC}   • ${BCYAN}User Protocol:${NC} ChaCha20-Poly1305                                      ${BBLUE}║${NC}"
-echo -e "${BBLUE}║${NC}   • ${BCYAN}Decoy Site:${NC}    Digikala (https://YourIP/)                             ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC}   • ${BCYAN}Decoy Site:${NC}    Digikala (https://${SERVER_IP}/)                          ${BBLUE}║${NC}"
 echo -e "${BBLUE}║${NC}                                                                             ${BBLUE}║${NC}"
 echo -e "${BBLUE}║${NC} ${BYELLOW}Management Commands:${NC}                                                        ${BBLUE}║${NC}"
 echo -e "${BBLUE}║${NC}   • Add Users:     ${BGREEN}Use useradd.py GUI${NC}                                      ${BBLUE}║${NC}"
 echo -e "${BBLUE}║${NC}   • Add WARP:      ${BGREEN}./MegaSSH-WARP.sh${NC}                                       ${BBLUE}║${NC}"
 echo -e "${BBLUE}║${NC}   • ${BRED}Run Audit:${NC}     ${BGREEN}./mega-audit.sh${NC}                                        ${BBLUE}║${NC}"
 echo -e "${BBLUE}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
+
+# --- Antigravity UI: Pingtunnel Mapping ---
+echo -e "\n${BCYAN}◈ SSH OVER ICMP (TRANSPARENT TUNNEL) CONFIGuration${NC}"
+echo -e "  ${BPURPLE}│${NC}"
+echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Local Entrance:${NC}  ${BCYAN}127.0.0.1:443${NC}"
+echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Transport:${NC}       ${BCYAN}ICMP Stealth Tunnel${NC}"
+echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Remote Target:${NC}   ${BCYAN}${SERVER_IP}:443${NC}"
+echo -e "  ${BPURPLE}│${NC}"
+echo -e "  ${BPURPLE}╰─>${NC} ${BWHITE}Local Client CMD:${NC} ${BGREEN}sudo ./pingtunnel -type client -l :443 -s ${SERVER_IP} -t 127.0.0.1:443 -key ${PINGTUNNEL_KEY}${NC}"
+echo -e "  ${BPURPLE}╰─>${NC} ${BWHITE}Final SSH CMD:${NC}   ${BGREEN}ssh root@127.0.0.1 -p 443${NC}"
 echo ""
 
 # --- Integrated Health Audit & Final Prompt ---
