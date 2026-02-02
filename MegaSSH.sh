@@ -528,8 +528,8 @@ print_step "8/10" "Applying Advanced Firewall & Geofencing..."
 # Fetching IP Lists from your GitHub automatically (OTRaainbow Source)
 download_user_list() {
     local cc=$1
-    local url="https://raw.githubusercontent.com/OTRaainbow/Mega-SSH/main/ip2location_country_${cc}.netset"
-    print_warn "Downloading $cc List from your GitHub..."
+    local url="https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/ip2location_country/ip2location_country_${cc}.netset"
+    print_warn "Downloading $cc List from FireHOL..."
     wget -q -O "ip2location_country_${cc}.netset" "$url"
 }
 download_user_list "ir"
@@ -637,14 +637,14 @@ run_integrated_audit() {
     IR_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
     RU_CN_COUNT=$(ipset list country_block_in 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
     
-    printf "%-35s" "[~] IPSet (Outbound Block)..."
+    printf "%-35s" "[~] IPSet (Outbound RU/CN/IR)..."
     if [ -n "$IR_COUNT" ] && [ "$IR_COUNT" -gt 0 ]; then 
         echo -e "${GREEN}[OK] ($IR_COUNT entries)${NC}"
     else 
         echo -e "${RED}[EMPTY/FAILED]${NC}"
     fi
     
-    printf "%-35s" "[~] IPSet (Inbound Block)..."
+    printf "%-35s" "[~] IPSet (Inbound RU/CN)..."
     if [ -n "$RU_CN_COUNT" ] && [ "$RU_CN_COUNT" -gt 0 ]; then echo -e "${GREEN}[OK] ($RU_CN_COUNT entries)${NC}"; else echo -e "${RED}[EMPTY/FAILED]${NC}"; fi
     
     # Check Strict DROP Rules

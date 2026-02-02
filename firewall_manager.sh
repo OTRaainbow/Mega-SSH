@@ -95,15 +95,16 @@ iptables -t nat -F
 iptables -t mangle -F
 iptables -t raw -F
 
+# 1. Block RU and CN (Both Inbound and Outbound) - "All traffic"
 for cc in ru cn; do
     FILE="ip2location_country_${cc}.netset"
     load_set_nuclear "$cc" "$FILE" "country_block_in"
     load_set_nuclear "$cc" "$FILE" "country_block_out"
 done
-# IRAN (IR) - Safe List
-# We do NOT load IR into country_block_out because we want it OPEN.
-# If you want to block inbound IR, uncomment below:
-# load_set_nuclear "ir" "ip2location_country_ir.netset" "country_block_in"
+
+# 2. Block Iran (IR) - OUTBOUND ONLY
+# This blocks your server from accessing Iranian sites, but lets YOU connect to the server.
+load_set_nuclear "ir" "ip2location_country_ir.netset" "country_block_out"
 
 # 2.5 LOAD CUSTOM USER RULES (ufw-user-*)
 if [ -f "user.rules" ]; then
