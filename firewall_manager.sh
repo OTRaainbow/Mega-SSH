@@ -161,13 +161,23 @@ iptables -t mangle -I FORWARD 1 -p udp --dport 53 -m set --match-set country_blo
 # 6. BASE CONNECTIVITY
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
 # Stealth Reset for INVALID packets (DPI Evasion)
 iptables -A INPUT -m conntrack --ctstate INVALID -j REJECT --reject-with tcp-reset
+
 # MSS Clamping (DPI Evasion)
 iptables -t mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1300
 iptables -t mangle -A OUTPUT -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1300
+
+# Open ONLY Ports 22 and 443
 iptables -A INPUT -p tcp --dport 22 -j ACCEPT
 iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+
+# 6.5 Pingtunnel (ICMP Wrapper)
+# Allow Incoming ICMP Echo Request (Type 8) and Outgoing Reply (Type 0)
+iptables -A INPUT -p icmp --icmp-type echo-request -j ACCEPT
+iptables -A OUTPUT -p icmp --icmp-type echo-reply -j ACCEPT
+
 iptables -P INPUT DROP
 
 # conntrack rate limiting for port 443 (EagleNet logic)

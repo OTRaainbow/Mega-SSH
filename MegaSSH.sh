@@ -521,7 +521,9 @@ fetch_script "stunnel_manager.sh"
 ./stunnel_manager.sh > /dev/null 2>&1
 fetch_script "shadowtls_manager.sh"
 ./shadowtls_manager.sh > /dev/null 2>&1
-print_success "TLS Wrappers Active (Stunnel + ShadowTLS)"
+fetch_script "pingtunnel_manager.sh"
+./pingtunnel_manager.sh > /dev/null 2>&1
+print_success "TLS Wrappers & Pingtunnel Active (Stunnel + ShadowTLS + Pingtunnel)"
 
 # 8. Firewall & Geofencing
 print_step "8/10" "Applying Advanced Firewall & Geofencing..."
@@ -596,6 +598,7 @@ echo -e "${BBLUE}║${NC} ${BYELLOW}Connection Details:${NC}                    
 echo -e "${BBLUE}║${NC}   • ${BCYAN}Direct SSH:${NC}    YourIP:443                                             ${BBLUE}║${NC}"
 echo -e "${BBLUE}║${NC}   • ${BRED}Rescue SSH:${NC}    YourIP:22 (Temp Enabled)                               ${BBLUE}║${NC}"
 echo -e "${BBLUE}║${NC}   • ${BCYAN}SSL Wrapped:${NC}   YourIP:8443 (via Stunnel)                              ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC}   • ${BCYAN}Pingtunnel:${NC}    YourIP (via ICMP -> Port 443)                          ${BBLUE}║${NC}"
 echo -e "${BBLUE}║${NC}   • ${BCYAN}User Protocol:${NC} ChaCha20-Poly1305                                      ${BBLUE}║${NC}"
 echo -e "${BBLUE}║${NC}   • ${BCYAN}Decoy Site:${NC}    Digikala (https://YourIP/)                             ${BBLUE}║${NC}"
 echo -e "${BBLUE}║${NC}                                                                             ${BBLUE}║${NC}"
@@ -630,6 +633,8 @@ run_integrated_audit() {
     check_port "Stunnel (SSL)" 8443
     check_port "ShadowTLS" 9443
     check_port "UDPGW" 7301
+    printf "%-35s" "[~] Checking Pingtunnel..."
+    if systemctl is-active --quiet pingtunnel; then echo -e "${GREEN}[OK]${NC}"; else echo -e "${RED}[FAILED]${NC}"; fi
     check_port "Rescue SSH" 22
 
     echo -e "\n${BYELLOW}--- Firewall Integrity ---${NC}"

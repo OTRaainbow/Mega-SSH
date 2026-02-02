@@ -231,6 +231,10 @@ net.ipv4.tcp_max_orphans = 262144
 net.ipv6.conf.all.disable_ipv6 = 1
 net.ipv6.conf.default.disable_ipv6 = 1
 net.ipv6.conf.lo.disable_ipv6 = 1
+
+# --- ICMP Tunneling Optimization ---
+# Ignore kernel ICMP echo to allow Pingtunnel to handle them
+net.ipv4.icmp_echo_ignore_all = 1
 EOF
 
 sysctl --system > /dev/null

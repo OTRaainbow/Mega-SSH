@@ -76,6 +76,7 @@ check_file "UDPGW.sh"
 # Helper managers often fetched
 check_file "stunnel_manager.sh"
 check_file "shadowtls_manager.sh"
+check_file "pingtunnel_manager.sh"
 
 # --- 2. Package & Dependency Check ---
 echo -e "\n${BYELLOW}--- 2. Package Installation Status ---${NC}"
@@ -122,6 +123,12 @@ check_service "ShadowTLS" 9443
 check_service "UDPGW" 7301
 check_service "Rescue SSH" 22
 
+# --- 3.5 Pingtunnel Health & Repository Check ---
+echo -e "\n${BYELLOW}--- 3.5 Pingtunnel Verification ---${NC}"
+check_file "/root/Pingtunnel_manager/install.sh"
+printf "%-40s" "[~] Checking Pingtunnel Service..."
+if systemctl is-active --quiet pingtunnel; then print_status 0; else print_status 1; echo "Service Down: Pingtunnel" >> "$LOG_FILE"; fi
+
 # --- 4. Firewall & Geo-Block Integrity ---
 echo -e "\n${BYELLOW}--- 4. Firewall Integrity ---${NC}"
 
@@ -162,6 +169,20 @@ if [ "$IPV6_STATUS" == "1" ]; then
 else
     echo -e "${RED}[LEAKING]${NC}"
     GLOBAL_FAIL=1
+fi
+
+# Check ICMP Tunnel Rules
+printf "%-40s" "[~] ICMP Tunnel Firewall Rules..."
+if iptables -L INPUT -n | grep -q "icmp type 8" && iptables -L OUTPUT -n | grep -q "icmp type 0"; then
+    echo -e "${GREEN}[ACTIVE]${NC}"
+else
+    # Check for mnemonic names as well
+    if iptables -L INPUT -n | grep -q "icmp echo-request" && iptables -L OUTPUT -n | grep -q "icmp echo-reply"; then
+        echo -e "${GREEN}[ACTIVE] (Mnemonic)${NC}"
+    else
+        echo -e "${RED}[MISSING]${NC}"
+        GLOBAL_FAIL=1
+    fi
 fi
 
 # --- 5. Extended Live Geo-Blocking Tests ---
