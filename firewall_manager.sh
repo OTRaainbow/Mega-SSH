@@ -163,7 +163,10 @@ iptables -A INPUT -i lo -j ACCEPT
 iptables -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 
 # Stealth Reset for INVALID packets (DPI Evasion)
-iptables -A INPUT -m conntrack --ctstate INVALID -j REJECT --reject-with tcp-reset
+# Fix: --reject-with tcp-reset is ONLY valid for TCP.
+iptables -A INPUT -p tcp -m conntrack --ctstate INVALID -j REJECT --reject-with tcp-reset
+iptables -A INPUT -p udp -m conntrack --ctstate INVALID -j DROP
+iptables -A INPUT -m conntrack --ctstate INVALID -j DROP
 
 # MSS Clamping (DPI Evasion)
 iptables -t mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1300

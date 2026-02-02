@@ -242,10 +242,12 @@ print_success "Kernel parameters applied."
 
 # --- Step 4: Hardware Optimization (RSS & RPS) ---
 print_step "4/5" "Enabling RPS on ${IFACE} (All Queues)..."
-# Set RPS to use all CPUs (Mask 'f' assumes 4 cores, simpler than calculating bitmask for now, or use ffffffff for max coverage)
+# Dynamic bitmask calculation (e.g., 1 core = 1, 2 cores = 3, 4 cores = f)
+CPUS=$(nproc)
+RPS_MASK=$(printf "%x" $(( (1 << CPUS) - 1 )))
 for file in /sys/class/net/"$IFACE"/queues/rx-*/rps_cpus; do
     if [ -f "$file" ]; then
-        echo "f" > "$file" && print_success "Enabled RPS on $(basename $(dirname $file))"
+        echo "$RPS_MASK" > "$file" && print_success "Enabled RPS on $(basename $(dirname $file)) (Mask: $RPS_MASK)"
     fi
 done
 

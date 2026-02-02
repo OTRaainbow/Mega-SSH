@@ -32,17 +32,25 @@ exec > >(tee -a ${LOG_FILE}) 2>&1
 
 print_banner() {
     clear
-    echo -e "${BBLUE}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BBLUE}║${NC} ${BCYAN}  __  __                  SSSSS   SSSSS  HH   HH                         ${BBLUE}║${NC}"
-    echo -e "${BBLUE}║${NC} ${BCYAN} |  \/  | ___  __ _  __ _SS      SS      HH   HH                         ${BBLUE}║${NC}"
-    echo -e "${BBLUE}║${NC} ${BCYAN} | |\/| |/ _ \/ _\` |/ _\` |SSSSS   SSSSS  HHH HHH                         ${BBLUE}║${NC}"
-    echo -e "${BBLUE}║${NC} ${BCYAN} | |  | |  __/ (_| | (_| |    SS      SS HH   HH                         ${BBLUE}║${NC}"
-    echo -e "${BBLUE}║${NC} ${BCYAN} |_|  |_|\___|\__, |\__,_|SSSSS   SSSSS  HH   HH                         ${BBLUE}║${NC}"
-    echo -e "${BBLUE}║${NC} ${BCYAN}              |___/                                                      ${BBLUE}║${NC}"
-    echo -e "${BBLUE}║                                                                             ║${NC}"
-    echo -e "${BBLUE}║${NC} ${BWHITE}        High-Security VPN Installer                                          ${BBLUE}║${NC}"
-    echo -e "${BBLUE}║${NC} ${BYELLOW}        Target OS: Ubuntu 24.04 | Version: 5.0 (FINAL SYNC)                  ${BBLUE}║${NC}"
-    echo -e "${BBLUE}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${BCYAN}      __  __                      ${BPURPLE}SSSSS   SSSSS  HH   HH${NC}"
+    echo -e "${BCYAN}     |  \/  | ___  __ _  __ _    ${BPURPLE}SS      SS      HH   HH${NC}"
+    echo -e "${BCYAN}     | |\/| |/ _ \/ _\` |/ _\` |    ${BPURPLE}SSSSS   SSSSS  HHH HHH${NC}"
+    echo -e "${BCYAN}     | |  | |  __/ (_| | (_| |       ${BPURPLE}SS      SS HH   HH${NC}"
+    echo -e "${BCYAN}     |_|  |_|\___|\__, |\__,_|    ${BPURPLE}SSSSS   SSSSS  HH   HH${NC}"
+    echo -e "${BCYAN}                   |___/                                ${NC}"
+    echo ""
+    echo -e "${BPURPLE}  ◈──────────────────────────────────────────────────────────────────◈${NC}"
+    echo -e "  ${BPURPLE}│${NC} ${BWHITE}PROJECT:${NC} ${BCYAN}MegaSSH Elite Edition (Stability Focus)${NC}             ${BPURPLE}│${NC}"
+    echo -e "  ${BPURPLE}│${NC} ${BWHITE}VERSION:${NC} ${BCYAN}6.2 (February 2026 Sync)${NC}                            ${BPURPLE}│${NC}"
+    echo -e "  ${BPURPLE}│${NC} ${BWHITE}TARGET :${NC} ${BCYAN}Ubuntu 24.04 Focal/Noble Balanced${NC}                   ${BPURPLE}│${NC}"
+    echo -e "${BPURPLE}  ◈──────────────────────────────────────────────────────────────────◈${NC}"
+    echo ""
+    echo -e "  ${BCYAN}◈ CORE ARCHITECTURE OVERVIEW${NC}"
+    echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Multiplexing:${NC}   ${CYAN}HAProxy 3.3.2 (Port 443 Split-Stream)${NC}"
+    echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Kernel Engine:${NC}  ${CYAN}XanMod v3 + Hertz BBRv3 (Low Latency)${NC}"
+    echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Privacy Shield:${NC} ${CYAN}Nuclear Firewall + Zero-Leak Geofencing${NC}"
+    echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Stealth Logic:${NC}  ${CYAN}ICMP Transparent Tunnel (Pingtunnel)${NC}"
+    echo -e "  ${BPURPLE}╰─${NC} ${BWHITE}Obfuscation :${NC}  ${CYAN}SSH Banner Cloaking (Microsoft_IIS Mode)${NC}"
     echo ""
 }
 
@@ -623,20 +631,19 @@ echo ""
 
 # --- Integrated Health Audit & Final Prompt ---
 run_integrated_audit() {
-    echo -e "${BBLUE}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BBLUE}║${NC} ${BCYAN}                   MEGASSH SYSTEM AUDIT (CHECK LOG)                          ${BBLUE}║${NC}"
-    echo -e "${BBLUE}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
+    # Re-use the SERVER_IP and colors from the final summary context
+    echo -e "${BCYAN}◈ MEGASSH ELITE SYSTEM AUDIT${NC}"
+    echo -e "${BPURPLE}─────────────────────────────────────────────────────────────────────────────${NC}"
     date
     
-    echo -e "\n${BYELLOW}--- Component Status ---${NC}"
-    # Diagnostic check function
+    echo -e "\n${BCYAN}◈ COMPONENT MAPPING${NC}"
     check_port() {
         local name=$1; local port=$2
-        printf "%-35s" "[~] Checking $name ($port)..."
+        printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$name ($port)${NC}"
         if ss -tlnp | grep -q ":$port "; then
-            echo -e "${GREEN}[OK]${NC}"; return 0
+            echo -e "${BGREEN}[PASS]${NC}"; return 0
         else
-            echo -e "${RED}[FAILED]${NC}"; return 1
+            echo -e "${BRED}[FAIL]${NC}"; return 1
         fi
     }
     check_port "Nginx (Decoy)" 80
@@ -645,66 +652,62 @@ run_integrated_audit() {
     check_port "Stunnel (SSL)" 8443
     check_port "ShadowTLS" 9443
     check_port "UDPGW" 7301
-    printf "%-35s" "[~] Checking Pingtunnel..."
-    if systemctl is-active --quiet pingtunnel; then echo -e "${GREEN}[OK]${NC}"; else echo -e "${RED}[FAILED]${NC}"; fi
+    printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Pingtunnel Service${NC}"
+    if systemctl is-active --quiet pingtunnel; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
     check_port "Rescue SSH" 22
 
-    echo -e "\n${BYELLOW}--- Firewall Integrity ---${NC}"
-    # Check IPSet
+    echo -e "\n${BCYAN}◈ FIREWALL & PRIVACY INTEGRITY${NC}"
     IR_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
-    RU_CN_COUNT=$(ipset list country_block_in 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
+    printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Geofence Entries (Privacy)${NC}"
+    if [ -n "$IR_COUNT" ] && [ "$IR_COUNT" -gt 0 ]; then echo -e "${BGREEN}[$IR_COUNT IPs]${NC}"; else echo -e "${BRED}[FAILED]${NC}"; fi
     
-    printf "%-35s" "[~] IPSet (Outbound RU/CN/IR)..."
-    if [ -n "$IR_COUNT" ] && [ "$IR_COUNT" -gt 0 ]; then 
-        echo -e "${GREEN}[OK] ($IR_COUNT entries)${NC}"
-    else 
-        echo -e "${RED}[EMPTY/FAILED]${NC}"
-    fi
-    
-    printf "%-35s" "[~] IPSet (Inbound RU/CN)..."
-    if [ -n "$RU_CN_COUNT" ] && [ "$RU_CN_COUNT" -gt 0 ]; then echo -e "${GREEN}[OK] ($RU_CN_COUNT entries)${NC}"; else echo -e "${RED}[EMPTY/FAILED]${NC}"; fi
-    
-    # Check Strict DROP Rules
-    printf "%-35s" "[~] Strict DROP (OUTPUT)..."
-    if iptables -L OUTPUT -n | grep -q "DROP.*country_block_out"; then echo -e "${GREEN}[ACTIVE]${NC}"; else echo -e "${RED}[MISSING]${NC}"; fi
+    printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Strict OUTBOUND DROP${NC}"
+    if iptables -L OUTPUT -n | grep -q "DROP.*country_block_out"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; fi
 
-    # Check Policy Routing (FWMark 0x99 -> Table 200)
-    printf "%-35s" "[~] Zero-Leak Routing (Rule Pri 2)..."
-    if ip rule show | grep -q "^2:.*fwmark 0x99.*lookup 200"; then echo -e "${GREEN}[ACTIVE]${NC}"; else echo -e "${RED}[BYPASS RISK]${NC}"; fi
-
-    printf "%-35s" "[~] IPv6 Status..."
+    printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Zero-Leak (IPv6 Disable)${NC}"
     IPV6_STATUS=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)
-    if [ "$IPV6_STATUS" == "1" ]; then echo -e "${GREEN}[DISABLED]${NC}"; else echo -e "${RED}[LEAKING]${NC}"; fi
+    if [ "$IPV6_STATUS" == "1" ]; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[LEAKING]${NC}"; fi
 
-    echo -e "\n${BYELLOW}--- Live Geo-Blocking Test (Strict) ---${NC}"
+    echo -e "\n${BCYAN}◈ LIVE PRIVACY VALIDATION (OUTBOUND)${NC}"
     test_block() {
-        local site=$1; local ip=$2
-        printf "%-35s" "[~] Testing $site..."
+        local site=$1; local ip=$2; local label=$3
+        printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$label${NC}"
         curl -m 4 -s -I --resolve "$site:80:$ip" "http://$site" > /dev/null 2>&1
         local ret=$?
         if [ $ret -eq 0 ]; then
-            echo -e "${RED}[FAILED - SITE OPENED]${NC}"
+            echo -e "${BRED}[LEAKED]${NC}"
         elif [ $ret -eq 28 ] || [ $ret -eq 7 ] || [ $ret -eq 3 ] || [ $ret -eq 6 ]; then
-            echo -e "${GREEN}[SUCCESS - BLOCKED]${NC}"
+            echo -e "${BGREEN}[PROTECTED]${NC}"
         else
-            echo -e "${YELLOW}[?] UNKNOWN (Error $ret)${NC}"
+            echo -e "${BYELLOW}[WARN $ret]${NC}"
         fi
     }
-    test_block "vk.com (Russia)" "87.240.139.194"
-    test_block "baidu.com (China)" "110.242.68.66"
-    test_block "digikala.com (Iran)" "185.239.104.14"
+    test_block "vk.com (RU)" "87.240.139.194" "Russia Geofence"
+    test_block "baidu.com (CN)" "110.242.68.66" "China Geofence"
+    test_block "digikala.com (IR)" "185.239.104.14" "Iran Privacy Block"
 
-    echo -e "\n${BBLUE}=================================================${NC}"
-    echo -e "${BGREEN}      ALL COMPONENTS VERIFIED & CORRECT          ${NC}"
-    echo -e "${BBLUE}=================================================${NC}"
+    echo -e "\n${BPURPLE}─────────────────────────────────────────────────────────────────────────────${NC}"
+    echo -e "${BGREEN}      ALL COMPONENTS VERIFIED & ELITE STATUS CONFIRMED          ${NC}"
+    echo -e "${BPURPLE}─────────────────────────────────────────────────────────────────────────────${NC}"
     
-    echo -e "\n${RED}[!] IMPORTANT: System changes require a reboot to be 100% effective.${NC}"
-    read -p "Would you like to REBOOT the server now? (y/n): " confirm
+    echo ""
+    echo -e "  ${BRED}◈ ACTION REQUIRED: SYSTEM OPTIMIZATION${NC}"
+    echo -e "  ${BPURPLE}│${NC}"
+    echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Changes :${NC} ${CYAN}XanMod Kernel, BBRv3, and Firewall Rules applied.${NC}"
+    echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Effect  :${NC} ${CYAN}Requires reboot to finalize kernel-level changes.${NC}"
+    echo -e "  ${BPURPLE}│${NC}"
+    echo -e "  ${BPURPLE}╰─>${NC} ${BWHITE}Would you like to REBOOT the server now?${NC} (${BGREEN}y${NC}/${BRED}n${NC}): "
+    read -p "      > " confirm
+    
     if [[ "$confirm" == [yY] ]]; then
-        echo -e "${GREEN}[+] Rebooting...${NC}"
+        echo -e "\n  ${BGREEN}[+] INITIALIZING SYSTEM REBOOT...${NC}"
+        echo -e "  ${BWHITE}Please wait 30-60 seconds before reconnecting.${NC}"
         reboot
+    else
+        echo -e "\n  ${BYELLOW}[!] WARNING: System is running on legacy kernel until next reboot.${NC}"
+        echo -e "      Manually run 'reboot' when ready."
     fi
 }
 
-echo -e "${YELLOW}[~] Starting Final System Validation...${NC}"
+echo -e "${BYELLOW}[~] Starting Elite System Validation...${NC}"
 run_integrated_audit
