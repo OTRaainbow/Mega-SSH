@@ -691,7 +691,7 @@ run_integrated_audit() {
     
     # 3. Mangle State Tracking
     printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Mangle Admin Safety (CT ESTAB)${NC}"
-    if iptables -t mangle -L OUTPUT -n | grep -q "ACCEPT.*multiport sports 22,443.*ctstate \(ESTABLISHED,RELATED\|RELATED,ESTABLISHED\)"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
+    if iptables -t mangle -L OUTPUT -n | grep -qiE "ACCEPT.*multiport sports 22,443.*ctstate (ESTABLISHED,RELATED|RELATED,ESTABLISHED)"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
 
     echo -e "\n${BCYAN}◈ LIVE ACID TEST (OUTBOUND)${NC}"
     test_block() {

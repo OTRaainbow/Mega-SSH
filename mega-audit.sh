@@ -65,8 +65,8 @@ check_service() {
 print_header
 
 echo -e "\n  ${BCYAN}◈ 1. CORE INFRASTRUCTURE (FILES & PKGS)${NC}"
-check_file "MegaSSH.sh"
-check_file "firewall_manager.sh"
+check_file "/root/MegaSSH.sh"
+check_file "/root/firewall_manager.sh"
 check_pkg "haproxy"
 check_pkg "nginx"
 check_pkg "ipset"
@@ -146,7 +146,7 @@ printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Outbound Block (Leak Switch)
 if iptables -t raw -L OUTPUT -n | grep -q "DROP.*country_block_out"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Mangle Admin Response (CT ESTAB)${NC}"
-if iptables -t mangle -L OUTPUT -n | grep -q "ACCEPT.*multiport sports 22,443.*ctstate \(ESTABLISHED,RELATED\|RELATED,ESTABLISHED\)"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
+if iptables -t mangle -L OUTPUT -n | grep -qiE "ACCEPT.*multiport sports 22,443.*ctstate (ESTABLISHED,RELATED|RELATED,ESTABLISHED)"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
 
 # Check Policy Routing (Table 200)
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Blackhole Route (Table 200)${NC}"
@@ -159,10 +159,10 @@ if ip rule show | grep -q "fwmark 0x99 lookup 200"; then echo -e "${BGREEN}[ACTI
 echo -e "\n  ${BCYAN}◈ 4. LIVE GEOPRIVACY VALIDATION${NC}"
 # DPI Checks
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}DPI Shield (MSS Clamp)${NC}"
-if iptables -t mangle -L -n | grep -qi "TCPMSS.*set.*1200"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
+if iptables -t mangle -S | grep -qiE "(TCPMSS.*set-mss 1200|set-mss 1200)"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
 
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}TTL Obfuscation (64)${NC}"
-if iptables -t mangle -L -n | grep -qiE "(TTL.*set.*64|TTL.*64)"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
+if iptables -t mangle -S | grep -qiE "(TTL.*set.*64|TTL.*64)"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
 
 # Check SSH Banner Obfuscation
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}SSH Banner (Microsoft_IIS)${NC}"
