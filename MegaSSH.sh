@@ -679,8 +679,8 @@ run_integrated_audit() {
     printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Geofence Entries (Privacy)${NC}"
     if [ -n "$IR_COUNT" ] && [ "$IR_COUNT" -gt 0 ]; then echo -e "${BGREEN}[$IR_COUNT IPs]${NC}"; else echo -e "${BRED}[FAILED]${NC}"; fi
     
-    printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Strict OUTBOUND DROP${NC}"
-    if iptables -L OUTPUT -n | grep -q "DROP.*country_block_out"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; fi
+    printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Strict OUTBOUND DROP (RAW)${NC}"
+    if iptables -t raw -L OUTPUT -n | grep -q "DROP.*country_block_out"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; fi
 
     printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Zero-Leak (IPv6 Disable)${NC}"
     IPV6_STATUS=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)

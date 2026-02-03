@@ -120,6 +120,9 @@ if [ -n "$IN_COUNT" ] && [ "$IN_COUNT" -gt 0 ]; then echo -e "${BGREEN}[$IN_COUN
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Table PREROUTING Drop${NC}"
 if iptables -t raw -L PREROUTING -n | grep -q "DROP.*country_block_in"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Table OUTPUT Drop (Leaks)${NC}"
+if iptables -t raw -L OUTPUT -n | grep -q "DROP.*country_block_out"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+
 # Check Policy Routing (Table 200)
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Blackhole Route (Table 200)${NC}"
 if ip route show table 200 2>/dev/null | grep -q "blackhole default"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
@@ -140,15 +143,35 @@ if iptables -t mangle -L POSTROUTING -n | grep -q "TTL set-to 64"; then echo -e 
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}SSH Banner (Microsoft_IIS)${NC}"
 if strings /usr/sbin/sshd | grep -q "Microsoft_IIS"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
 
-# Live Tests
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Russia Geofence (Bidirectional)${NC}"
-if curl -m 3 -s -I --resolve "vk.com:80:87.240.139.194" "http://vk.com" > /dev/null 2>&1; then echo -e "${BRED}[LEAKED]${NC}"; GLOBAL_FAIL=1; else echo -e "${BGREEN}[PROTECTED]${NC}"; fi
+# Live High-Precision Tests (Nuclear Shield)
+test_leak() {
+    local site=$1; local ip=$2; local label=$3
+    printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$label${NC}"
+    
+    # Use 3s timeout as per user reporting
+    # Treat ANY response (even headers only) as a leak
+    local output=$(curl -m 3 -s -I --resolve "$site:80:$ip" "http://$site" 2>&1)
+    local ret=$?
+    
+    if [ $ret -eq 0 ]; then
+        echo -e "${BRED}[LEAKED]${NC}"
+        echo "Leak detected on $label:" >> "$LOG_FILE"
+        echo "$output" | head -n 5 >> "$LOG_FILE"
+        GLOBAL_FAIL=1
+    elif echo "$output" | grep -qi "ArvanCloud"; then
+        echo -e "${BRED}[AK-LEAK]${NC}" # ArvanCloud Leak
+        echo "ArvanCloud Leak on $label" >> "$LOG_FILE"
+        GLOBAL_FAIL=1
+    elif [ $ret -eq 28 ] || [ $ret -eq 7 ] || [ $ret -eq 3 ] || [ $ret -eq 6 ]; then
+        echo -e "${BGREEN}[SECURE]${NC}"
+    else
+        echo -e "${BYELLOW}[ERR $ret]${NC}"
+    fi
+}
 
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}China Geofence (Bidirectional)${NC}"
-if curl -m 3 -s -I --resolve "baidu.com:80:110.242.68.66" "http://baidu.com" > /dev/null 2>&1; then echo -e "${BRED}[LEAKED]${NC}"; GLOBAL_FAIL=1; else echo -e "${BGREEN}[PROTECTED]${NC}"; fi
-
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Iran Privacy (Outbound Only)${NC}"
-if curl -m 3 -s -I --resolve "snapp.ir:80:185.239.104.14" "http://snapp.ir" > /dev/null 2>&1; then echo -e "${BRED}[LEAKED]${NC}"; GLOBAL_FAIL=1; else echo -e "${BGREEN}[PROTECTED]${NC}"; fi
+test_leak "vk.com (RU)" "87.240.139.194" "Russia Geofence"
+test_leak "baidu.com (CN)" "110.242.68.66" "China Geofence"
+test_leak "snapp.ir (IR)" "185.239.104.14" "Iran Privacy Block"
 
 # FINAL VERDICT
 echo -e "\n${BPURPLE}  ◈──────────────────────────────────────────────────────────────────◈${NC}"

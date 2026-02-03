@@ -134,25 +134,27 @@ done
 
 ip rule add fwmark 0x99 table 200 priority 2
 
-# 4. MULTILAYER ENFORCEMENT
-# Optimization: Mark only in PREROUTING (inbound) and OUTPUT (outbound generated on box)
+# 4. NUCLEAR ENFORCEMENT - RAW TABLE (L3/L4 PRE-CONNTRACK)
+print_step "4/7" "Applying RAW Table Blocking (Pre-State Enforcement)..."
 
-# 1. Total block for CN/RU at the entrance (Inbound/Outbound BIDIRECTIONAL)
-iptables -t raw -I PREROUTING 1 -m set --match-set country_block_in src -j DROP
-iptables -t raw -I PREROUTING 1 -m set --match-set country_block_in dst -j DROP
+# Flush raw table to ensure a clean state
+iptables -t raw -F
 
-# 2. Total Outbound Blackhole for CN/RU/IR (Highest Priority)
-iptables -I OUTPUT 1 -m set --match-set country_block_out dst -j DROP
-iptables -I FORWARD 1 -m set --match-set country_block_out dst -j DROP
+# 1. IMMEDIATE DROP for OUTBOUND to CN, RU, and IR
+# This kills the packet before the kernel cycles through the Filter table.
+iptables -t raw -A OUTPUT -m set --match-set country_block_out dst -j DROP
 
-# 3. Routing Table 200 Blackhole (The 0x99 Mark)
-# Ensures packets hit routing dead-end even if filter is bypassed
-iptables -t mangle -I PREROUTING 1 -m set --match-set country_block_out dst -j MARK --set-mark 0x99
-iptables -t mangle -I OUTPUT 1 -m set --match-set country_block_out dst -j MARK --set-mark 0x99
+# 2. IMMEDIATE DROP for INBOUND from CN and RU
+iptables -t raw -A PREROUTING -m set --match-set country_block_in src -j DROP
+
+# 3. FORWARDING Protection (For tunnel/proxy users)
+iptables -t raw -A PREROUTING -m set --match-set country_block_out dst -j DROP
 
 # 5. DNS HIJACK PREVENTION (Force stay within allowed zones)
-iptables -t mangle -I OUTPUT 1 -p udp --dport 53 -m set --match-set country_block_out dst -j MARK --set-mark 0x99
-iptables -t mangle -I FORWARD 1 -p udp --dport 53 -m set --match-set country_block_out dst -j MARK --set-mark 0x99
+# We handle this in mangle for marking, or in raw for immediate drop if problematic.
+# MARK still happens in mangle to feed the Table 200 blackhole.
+iptables -t mangle -I PREROUTING 1 -m set --match-set country_block_out dst -j MARK --set-mark 0x99
+iptables -t mangle -I OUTPUT 1 -m set --match-set country_block_out dst -j MARK --set-mark 0x99
 
 # 6. BASE CONNECTIVITY & SECURITY
 iptables -A INPUT -i lo -j ACCEPT
@@ -177,8 +179,9 @@ iptables -A OUTPUT -p icmp --icmp-type echo-reply -j ACCEPT
 
 iptables -P INPUT DROP
 
-# 6.5 Flush Route Cache (CRITICAL)
-print_step "6.5" "Flushing Route Cache..."
+# 6.5 Flush State & Route Cache (CRITICAL)
+print_step "6.5" "Cleaning Connection States & Route Cache..."
+command -v conntrack >/dev/null && conntrack -F
 ip route flush cache
 
 # 7. Persistence
