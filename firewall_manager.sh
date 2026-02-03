@@ -286,12 +286,17 @@ iptables -t raw -X 2>/dev/null
 # 2. PERFORMANCE OPTIMIZATION (NOTRACK Admin/Service Ports)
 # Bypasses conntrack for high-volume SSH/Decoy traffic
 print_info "Injecting RAW table NOTRACK rules for ports 22, 443..."
-iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,443 -j NOTRACK
-iptables -t raw -A OUTPUT -p tcp -m multiport --sports 22,443 -j NOTRACK
+# Ensure modules are loaded
+modprobe iptable_raw 2>/dev/null
+modprobe xt_multiport 2>/dev/null
+
+# Use -I to ensure rules are at the TOP of the chain
+iptables -t raw -I PREROUTING -p tcp -m multiport --dports 22,443 -j NOTRACK
+iptables -t raw -I OUTPUT -p tcp -m multiport --sports 22,443 -j NOTRACK
 
 # 3. ALLOW (Post-NOTRACK logic parity)
-iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,443 -j ACCEPT
-iptables -t raw -A OUTPUT -p tcp -m multiport --sports 22,443 -j ACCEPT
+iptables -t raw -I PREROUTING -p tcp -m multiport --dports 22,443 -j ACCEPT
+iptables -t raw -I OUTPUT -p tcp -m multiport --sports 22,443 -j ACCEPT
 
 # 4. BLOCK OUTBOUND (Leak Prevention)
 # Check if ipset exists and has entries before applying to avoid match error
@@ -366,12 +371,12 @@ VAL_FAIL=0
 
 # Check RAW table using ultra-resilient patterns
 if ! iptables -t raw -S PREROUTING 2>/dev/null | grep -qi "notrack"; then
-    print_error "Raw PREROUTING NOTRACK rule missing!"
+    print_error "Raw PREROUTING NOTRACK rule missing or mismatched!"
     VAL_FAIL=1
 fi
 
 if ! iptables -t raw -S OUTPUT 2>/dev/null | grep -qi "notrack"; then
-    print_error "Raw OUTPUT NOTRACK rule missing!"
+    print_error "Raw OUTPUT NOTRACK rule missing or mismatched!"
     VAL_FAIL=1
 fi
 

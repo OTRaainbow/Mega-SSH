@@ -24,11 +24,15 @@ echo -e "${BGREEN}Nginx repaired and restarted.${NC}"
 
 # 2. Force Missing Firewall Rules (NOTRACK)
 echo -e "${BYELLOW}[STEP 2] Injecting RAW Table NOTRACK Rules...${NC}"
-iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,443 -j NOTRACK
-iptables -t raw -A OUTPUT -p tcp -m multiport --sports 22,443 -j NOTRACK
+modprobe iptable_raw 2>/dev/null
+modprobe xt_multiport 2>/dev/null
+
+# Use -I to ensure rules are at the TOP of the chain to override any previous blocks
+iptables -t raw -I PREROUTING -p tcp -m multiport --dports 22,443 -j NOTRACK
+iptables -t raw -I OUTPUT -p tcp -m multiport --sports 22,443 -j NOTRACK
 # Parity ACCEPT rules (Ensures traffic isn't dropped by subsequent rules if misconfigured)
-iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,443 -j ACCEPT
-iptables -t raw -A OUTPUT -p tcp -m multiport --sports 22,443 -j ACCEPT
+iptables -t raw -I PREROUTING -p tcp -m multiport --dports 22,443 -j ACCEPT
+iptables -t raw -I OUTPUT -p tcp -m multiport --sports 22,443 -j ACCEPT
 
 if command -v netfilter-persistent >/dev/null 2>&1; then
     netfilter-persistent save
