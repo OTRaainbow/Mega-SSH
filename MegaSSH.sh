@@ -205,14 +205,19 @@ if ! command -v nginx > /dev/null || [[ $(nginx -v 2>&1 | grep -o "nginx/") == "
     apt install -y nginx nginx-module-njs >> $LOG_FILE 2>&1
     
     # Enable NJS Module in global config
-    mkdir -p /etc/nginx/modules-enabled
     if [ -f /etc/nginx/nginx.conf ]; then
-        # Remove existing loads if any
-        sed -i '/ngx_http_js_module/d' /etc/nginx/nginx.conf
-        sed -i '/ngx_stream_js_module/d' /etc/nginx/nginx.conf
-        # Re-add at the top
-        sed -i '1i load_module modules/ngx_http_js_module.so;' /etc/nginx/nginx.conf
-        sed -i '2i load_module modules/ngx_stream_js_module.so;' /etc/nginx/nginx.conf
+        # Detect module path (Official repo uses /usr/lib/nginx/modules/)
+        MOD_PATH=$(find /usr/lib/nginx/modules -name "ngx_http_js_module.so" 2>/dev/null | head -n1 | xargs dirname)
+        [ -z "$MOD_PATH" ] && MOD_PATH=$(find /usr -name "ngx_http_js_module.so" 2>/dev/null | head -n1 | xargs dirname)
+        [ -z "$MOD_PATH" ] && MOD_PATH="/etc/nginx/modules" # Fallback
+        
+        if [ -n "$MOD_PATH" ]; then
+            sed -i '/ngx_http_js_module/d' /etc/nginx/nginx.conf
+            sed -i '/ngx_stream_js_module/d' /etc/nginx/nginx.conf
+            # Insert at the very top of nginx.conf
+            sed -i "1i load_module $MOD_PATH/ngx_http_js_module.so;" /etc/nginx/nginx.conf
+            sed -i "2i load_module $MOD_PATH/ngx_stream_js_module.so;" /etc/nginx/nginx.conf
+        fi
     fi
     print_success "Nginx Mainline + NJS Installed & Configured"
 else
@@ -594,9 +599,10 @@ fetch_script "firewall_manager.sh"
 fetch_script "mega-audit.sh"
 
 # Move to /usr/local/bin for system-wide access
-cp MegaSSH.sh /usr/local/bin/MegaSSH.sh 2>/dev/null
-mv firewall_manager.sh /usr/local/bin/firewall_manager.sh
-mv mega-audit.sh /usr/local/bin/mega-audit.sh
+SCRIPT_SRC=$(readlink -f "$0" 2>/dev/null || echo "$PWD/MegaSSH.sh")
+[ -f "$SCRIPT_SRC" ] && cp "$SCRIPT_SRC" /usr/local/bin/MegaSSH.sh
+[ -f "firewall_manager.sh" ] && mv firewall_manager.sh /usr/local/bin/firewall_manager.sh
+[ -f "mega-audit.sh" ] && mv mega-audit.sh /usr/local/bin/mega-audit.sh
 chmod +x /usr/local/bin/MegaSSH.sh /usr/local/bin/firewall_manager.sh /usr/local/bin/mega-audit.sh
 
 # 3. Sync Geofence Data (netsets) BEFORE running the firewall

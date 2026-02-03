@@ -176,24 +176,26 @@ ip rule add fwmark 0x99 table 200 priority 2
 # ==============================================================================
 print_step "4/7" "Applying RAW Table Blocking (Directional Precision)..."
 
-# 1. Clear Raw Table
-iptables -t raw -F
+# 1. Clear Raw Table (Ignore errors if table is empty)
+iptables -t raw -F 2>/dev/null
+iptables -t raw -X 2>/dev/null
 
 # 2. ALLOW INBOUND (Admin Connect)
-# Allows you to connect TO the server on ports 22/443.
-iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,443 -j ACCEPT
+iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,2222,443 -j ACCEPT
 
 # 3. ALLOW OUTBOUND RESPONSE (Admin Reply)
-# Allows the server to talk BACK to you (source port 22/443).
-iptables -t raw -A OUTPUT -p tcp -m multiport --sports 22,443 -j ACCEPT
+iptables -t raw -A OUTPUT -p tcp -m multiport --sports 22,2222,443 -j ACCEPT
 
 # 4. BLOCK OUTBOUND (Leak Prevention)
-# Strictly drops any other traffic trying to reach blocked countries (e.g. curl).
-iptables -t raw -A OUTPUT -m set --match-set country_block_out dst -j DROP
+# Check if ipset exists and has entries before applying to avoid match error
+if ipset list country_block_out >/dev/null 2>&1; then
+    iptables -t raw -A OUTPUT -m set --match-set country_block_out dst -j DROP
+fi
 
 # 5. BLOCK INBOUND (General Security)
-# Blocks everything from RU/CN that didn't hit the specific 'Allow' rule.
-iptables -t raw -A PREROUTING -m set --match-set country_block_in src -j DROP
+if ipset list country_block_in >/dev/null 2>&1; then
+    iptables -t raw -A PREROUTING -m set --match-set country_block_in src -j DROP
+fi
 
 # 5. DNS HIJACK PREVENTION & BLACKHOLE ROUTING
 # Clear old mangle rules

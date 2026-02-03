@@ -105,7 +105,7 @@ check_service "UDPGW (BadVPN)" 7301
 check_service "Stunnel (SSL)" 8443
 check_service "ShadowTLS" 9443
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Nginx NJS Support${NC}"
-if nginx -V 2>&1 | grep -qE "(njs|js_module)"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[OFF]${NC}"; fi
+if [ -f /etc/nginx/nginx.conf ] && grep -q "js_module" /etc/nginx/nginx.conf; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[OFF]${NC}"; fi
 
 echo -e "\n  ${BCYAN}◈ 3. NUCLEAR FIREWALL INTEGRITY${NC}"
 # Check IPv6 Status
