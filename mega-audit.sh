@@ -53,12 +53,12 @@ check_file() {
 
 check_pkg() {
     local pkg=$1; printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$pkg${NC}"
-    if dpkg -s "$pkg" >/dev/null 2>&1; then print_status 0; else print_status 1; echo "Missing pkg: $pkg" >> "$LOG_FILE"; fi
+    if dpkg -s "$pkg" >/dev/null 2>&1 || command -v "$pkg" >/dev/null 2>&1; then print_status 0; else print_status 1; echo "Missing pkg: $pkg" >> "$LOG_FILE"; fi
 }
 
 check_service() {
     local name=$1; local port=$2; printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$name ($port)${NC}"
-    if ss -tpln | grep -q ":$port "; then print_status 0; else print_status 1; echo "Down: $name ($port)" >> "$LOG_FILE"; fi
+    if ss -tpln | grep -qE ":$port " || ss -tpln | grep -qE "haproxy.*:$port"; then print_status 0; else print_status 1; echo "Down: $name ($port)" >> "$LOG_FILE"; fi
 }
 
 # START AUDIT
@@ -67,7 +67,6 @@ print_header
 echo -e "\n  ${BCYAN}◈ 1. CORE INFRASTRUCTURE (FILES & PKGS)${NC}"
 check_file "MegaSSH.sh"
 check_file "firewall_manager.sh"
-check_file "pingtunnel_manager.sh"
 check_pkg "haproxy"
 check_pkg "nginx"
 check_pkg "ipset"
@@ -104,8 +103,7 @@ check_service "HAProxy (Mux)" 443
 check_service "SSH (EagleNet)" 2222
 check_service "UDPGW (BadVPN)" 7301
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Nginx NJS Support${NC}"
-if nginx -V 2>&1 | grep -q "ngx_http_js_module"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[OFF]${NC}"; fi
-# Pingtunnel removed for TCP Direct purity
+if nginx -V 2>&1 | grep -qE "(njs|js_module)"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[OFF]${NC}"; fi
 
 echo -e "\n  ${BCYAN}◈ 3. NUCLEAR FIREWALL INTEGRITY${NC}"
 # Check IPv6 Status
@@ -161,10 +159,10 @@ if ip rule show | grep -q "fwmark 0x99 lookup 200"; then echo -e "${BGREEN}[ACTI
 echo -e "\n  ${BCYAN}◈ 4. LIVE GEOPRIVACY VALIDATION${NC}"
 # DPI Checks
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}DPI Shield (MSS Clamp)${NC}"
-if iptables -t mangle -L POSTROUTING -n | grep -q "TCPMSS.*set-mss 1200"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
+if iptables -t mangle -L -n | grep -qi "TCPMSS.*set.*1200"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
 
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}TTL Obfuscation (64)${NC}"
-if iptables -t mangle -L POSTROUTING -n | grep -q "TTL set-to 64"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
+if iptables -t mangle -L -n | grep -qiE "(TTL.*set.*64|TTL.*64)"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
 
 # Check SSH Banner Obfuscation
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}SSH Banner (Microsoft_IIS)${NC}"

@@ -201,8 +201,11 @@ iptables -A INPUT -p udp -m conntrack --ctstate INVALID -j DROP
 iptables -A INPUT -m conntrack --ctstate INVALID -j DROP
 
 # MSS Clamping & TTL Obfuscation (DPI Evasion)
+# Apply to both OUTPUT (local) and POSTROUTING (forwarded/local)
 iptables -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1200
+iptables -t mangle -A OUTPUT -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1200
 iptables -t mangle -A POSTROUTING -j TTL --ttl-set 64
+iptables -t mangle -A OUTPUT -j TTL --ttl-set 64
 
 # Open ONLY Ports 22 and 443
 iptables -A INPUT -p tcp --dport 22 -j ACCEPT
