@@ -153,21 +153,21 @@ ip rule add fwmark 0x99 table 200 priority 2
 # 4. NUCLEAR ENFORCEMENT - RAW TABLE (L3/L4 PRE-CONNTRACK)
 print_step "4/7" "Applying RAW Table Blocking (Pre-State Enforcement)..."
 
-# Flush raw table to ensure a clean state
+# 1. Clear Raw Table for a clean state
 iptables -t raw -F
 
-# --- ANTI-LOCKOUT EXCEPTIONS (Port 22 & 443) ---
-# Allow administrative traffic FIRST so you don't get locked out.
+# 2. ALLOW INBOUND: This lets YOU connect to the server from Iran
+# We only match packets where the DESTINATION port is 22 or 443.
 iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,443 -j ACCEPT
-iptables -t raw -A OUTPUT -p tcp -m multiport --sports 22,443 -j ACCEPT
 
-# 1. IMMEDIATE DROP for OUTBOUND to CN, RU, and IR (Websites/APIs)
+# 3. BLOCK OUTBOUND: This stops the server from talking to Iranian sites
+# This kills the connection to isna.ir even if you are logged in.
 iptables -t raw -A OUTPUT -m set --match-set country_block_out dst -j DROP
 
-# 2. IMMEDIATE DROP for INBOUND from CN and RU (Total Isolation)
+# 4. BLOCK INBOUND: General protection from RU/CN probes
 iptables -t raw -A PREROUTING -m set --match-set country_block_in src -j DROP
 
-# 3. FORWARDING Protection (For tunnel/proxy users)
+# 5. FORWARDING Protection (For tunnel/proxy users)
 iptables -t raw -A PREROUTING -m set --match-set country_block_out dst -j DROP
 
 # 5. DNS HIJACK PREVENTION (Force stay within allowed zones)
