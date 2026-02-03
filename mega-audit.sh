@@ -152,7 +152,16 @@ if ip route show table 200 2>/dev/null | grep -q "blackhole default"; then echo 
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Fwmark 0x99 Routing Rule${NC}"
 if ip rule show | grep -q "fwmark 0x99 lookup 200"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
-echo -e "\n  ${BCYAN}◈ 4. LIVE GEOPRIVACY VALIDATION${NC}"
+echo -e "\n  ${BCYAN}◈ 4. ANTI-LOCKOUT INTEGRITY (SAFETY CHECK)${NC}"
+# Check RAW Exceptions
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}RAW SSH Whitelist (22,443)${NC}"
+if iptables -t raw -L PREROUTING -n | grep -q "ACCEPT.*multiport dports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
+
+# Check Mangle Exceptions
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Mangle SSH Skip (22,443)${NC}"
+if iptables -t mangle -L OUTPUT -n | grep -q "ACCEPT.*multiport sports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
+
+echo -e "\n  ${BCYAN}◈ 5. LIVE GEOPRIVACY VALIDATION${NC}"
 # DPI Checks
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}DPI Shield (MSS Clamp)${NC}"
 if iptables -t mangle -L POSTROUTING -n | grep -q "TCPMSS.*set-mss 1200"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi

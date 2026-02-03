@@ -156,21 +156,27 @@ print_step "4/7" "Applying RAW Table Blocking (Pre-State Enforcement)..."
 # Flush raw table to ensure a clean state
 iptables -t raw -F
 
-# 1. IMMEDIATE DROP for OUTBOUND to CN, RU, and IR
-# This kills the packet before the kernel cycles through the Filter table.
+# --- ANTI-LOCKOUT EXCEPTIONS (Port 22 & 443) ---
+# Allow administrative traffic FIRST so you don't get locked out.
+iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,443 -j ACCEPT
+iptables -t raw -A OUTPUT -p tcp -m multiport --sports 22,443 -j ACCEPT
+
+# 1. IMMEDIATE DROP for OUTBOUND to CN, RU, and IR (Websites/APIs)
 iptables -t raw -A OUTPUT -m set --match-set country_block_out dst -j DROP
 
-# 2. IMMEDIATE DROP for INBOUND from CN and RU
+# 2. IMMEDIATE DROP for INBOUND from CN and RU (Total Isolation)
 iptables -t raw -A PREROUTING -m set --match-set country_block_in src -j DROP
 
 # 3. FORWARDING Protection (For tunnel/proxy users)
 iptables -t raw -A PREROUTING -m set --match-set country_block_out dst -j DROP
 
 # 5. DNS HIJACK PREVENTION (Force stay within allowed zones)
-# We handle this in mangle for marking, or in raw for immediate drop if problematic.
-# MARK still happens in mangle to feed the Table 200 blackhole.
-iptables -t mangle -I PREROUTING 1 -m set --match-set country_block_out dst -j MARK --set-mark 0x99
-iptables -t mangle -I OUTPUT 1 -m set --match-set country_block_out dst -j MARK --set-mark 0x99
+# MARK traffic to feed the Table 200 blackhole.
+# EXCEPTION: Do NOT mark SSH/HAProxy reply traffic.
+iptables -t mangle -I OUTPUT 1 -p tcp -m multiport --sports 22,443 -j ACCEPT
+
+iptables -t mangle -A PREROUTING -m set --match-set country_block_out dst -j MARK --set-mark 0x99
+iptables -t mangle -A OUTPUT -m set --match-set country_block_out dst -j MARK --set-mark 0x99
 
 # 6. BASE CONNECTIVITY & SECURITY
 iptables -A INPUT -i lo -j ACCEPT
@@ -203,6 +209,9 @@ ip route flush cache
 # 7. Persistence
 mkdir -p /etc/iptables
 iptables-save > /etc/iptables/rules.v4
+ip6tables-save > /etc/iptables/rules.v6 2>/dev/null
+ipset save > /etc/iptables/ipsets.save 2>/dev/null
+
 if command -v netfilter-persistent >/dev/null; then
     netfilter-persistent save > /dev/null 2>&1
 fi
