@@ -722,6 +722,15 @@ sync_to_bin() {
     fi
 }
 
+# Repair/Sync local source to /root/ to resolve audit warnings
+# This is done BEFORE synchronization to ensure the source file exists even if piped.
+wget -q -O /root/MegaSSH.sh https://raw.githubusercontent.com/OTRaainbow/Mega-SSH/main/MegaSSH.sh
+chmod +x /root/MegaSSH.sh
+print_success "MegaSSH.sh synced to /root/ for audit compatibility"
+
+# Update ABS_PATH to reflect the now-existent /root file for system-wide sync
+ABS_PATH="/root/MegaSSH.sh"
+
 print_info "Synchronizing core scripts to /usr/local/bin..."
 sync_to_bin "$ABS_PATH"
 sync_to_bin "firewall_manager.sh"
@@ -787,10 +796,6 @@ print_step "Final" "Writing installation success flag..."
 if [ ! -f "$LOG_FILE" ]; then touch "$LOG_FILE"; fi
 # Remove old success flags if they exist to avoid duplication
 sed -i '/MEGASSH_INSTALLATION_SUCCESSFUL/d' "$LOG_FILE"
-# Repair/Sync local source to /root/ to resolve audit warnings
-wget -q -O /root/MegaSSH.sh https://raw.githubusercontent.com/OTRaainbow/Mega-SSH/main/MegaSSH.sh
-chmod +x /root/MegaSSH.sh
-print_success "MegaSSH.sh synced to /root/ for audit compatibility"
 
 echo "MEGASSH_INSTALLATION_SUCCESSFUL" >> $LOG_FILE
 print_success "Installation status finalized in $LOG_FILE"
