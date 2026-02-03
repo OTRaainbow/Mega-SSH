@@ -80,8 +80,24 @@ load_set_nuclear() {
     print_success "($count entries)"
 }
 
-# 2. NUCLEAR FLUSH
-print_step "2/7" "Nuclear Flush (Cleaning all tables)..."
+# 2. NUCLEAR FLUSH & IPv6 KILL
+print_step "2/7" "Nuclear Flush & IPv6 Killer (Zero-Leak Enforcement)..."
+
+# A. Disable IPv6 via Sysctl
+sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1
+sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1
+sysctl -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null 2>&1
+
+# B. Hard-block IPv6 via ip6tables
+if command -v ip6tables >/dev/null; then
+    ip6tables -P INPUT DROP
+    ip6tables -P OUTPUT DROP
+    ip6tables -P FORWARD DROP
+    ip6tables -F
+    ip6tables -X
+fi
+
+# C. Flush IPv4 Tables
 if command -v ufw >/dev/null; then ufw disable >/dev/null 2>&1; fi
 iptables -F
 iptables -X
@@ -179,7 +195,7 @@ iptables -A OUTPUT -p icmp --icmp-type echo-reply -j ACCEPT
 
 iptables -P INPUT DROP
 
-# 6.5 Flush State & Route Cache (CRITICAL)
+# 6.5 Flush State & Route Cache (CRITICAL - No Ghost Connections)
 print_step "6.5" "Cleaning Connection States & Route Cache..."
 command -v conntrack >/dev/null && conntrack -F
 ip route flush cache

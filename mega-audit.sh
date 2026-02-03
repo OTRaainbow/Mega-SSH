@@ -110,6 +110,14 @@ echo -e "\n  ${BCYAN}◈ 3. NUCLEAR FIREWALL INTEGRITY${NC}"
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Zero-Leak (IPv6 Disable)${NC}"
 if [ "$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)" == "1" ]; then print_status 0; else print_status 1; fi
 
+# Check ip6tables Policy
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}ip6tables Mandatory DROP${NC}"
+if ip6tables -L -n 2>/dev/null | grep -q "Chain INPUT (policy DROP)" && ip6tables -L -n 2>/dev/null | grep -q "Chain OUTPUT (policy DROP)"; then
+    echo -e "${BGREEN}[ACTIVE]${NC}"
+else
+    echo -e "${BRED}[OPEN]${NC}"; GLOBAL_FAIL=1
+fi
+
 # Check IPSets
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Nuclear IPSet (Isolation)${NC}"
 IN_COUNT=$(ipset list country_block_in 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
@@ -171,7 +179,8 @@ test_leak() {
 
 test_leak "vk.com (RU)" "87.240.139.194" "Russia Geofence"
 test_leak "baidu.com (CN)" "110.242.68.66" "China Geofence"
-test_leak "snapp.ir (IR)" "185.239.104.14" "Iran Privacy Block"
+test_leak "isna.ir (IR)" "94.182.182.28" "Iran ISNA Privacy Block"
+test_leak "snapp.ir (IR)" "185.239.104.14" "Iran Snapp Privacy Block"
 
 # FINAL VERDICT
 echo -e "\n${BPURPLE}  ◈──────────────────────────────────────────────────────────────────◈${NC}"
