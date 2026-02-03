@@ -274,37 +274,27 @@ done
 
 ip rule add fwmark 0x99 table 200 priority 2
 
-# ==============================================================================
-# NUCLEAR ENFORCEMENT - RAW TABLE (L3/L4 PRE-CONNTRACK)
-# ==============================================================================
-print_step "4/7" "Applying RAW Table Blocking (Directional Precision)..."
-
-# 1. Clear Raw Table (Ignore errors if table is empty)
+# 2. RAW TABLE RECONSTRUCTION (Matches User manual rescue order)
 iptables -t raw -F 2>/dev/null
-iptables -t raw -X 2>/dev/null
 
-# 2. PERFORMANCE OPTIMIZATION (NOTRACK Admin/Service Ports)
-# Bypasses conntrack for high-volume SSH/Decoy traffic
+# A. NOTRACK Admin Rules
+iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,443 -j NOTRACK
+iptables -t raw -A OUTPUT -p tcp -m multiport --sports 22,443 -j NOTRACK
+
+# B. Parity ACCEPT Rules
+iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,443 -j ACCEPT
+iptables -t raw -A OUTPUT -p tcp -m multiport --sports 22,443 -j ACCEPT
+
+# 2. PERFORMANCE OPTIMIZATION (High-Volume Admin/Service Ports)
+# Bypasses conntrack to ensure stability during high-load scanning or usage.
 print_info "Injecting RAW table NOTRACK rules for ports 22, 443..."
-# Ensure modules are loaded
-modprobe iptable_raw 2>/dev/null
-modprobe xt_multiport 2>/dev/null
-
-# Use -I to ensure rules are at the TOP of the chain
-iptables -t raw -I PREROUTING -p tcp -m multiport --dports 22,443 -j NOTRACK
-iptables -t raw -I OUTPUT -p tcp -m multiport --sports 22,443 -j NOTRACK
-
-# 3. ALLOW (Post-NOTRACK logic parity)
-iptables -t raw -I PREROUTING -p tcp -m multiport --dports 22,443 -j ACCEPT
-iptables -t raw -I OUTPUT -p tcp -m multiport --sports 22,443 -j ACCEPT
-
-# 4. BLOCK OUTBOUND (Leak Prevention)
-# Check if ipset exists and has entries before applying to avoid match error
+# 3. GEOPRIVACY (Nuclear Leak Switch)
+# Block outbound and inbound based on IPSets
 if ipset list country_block_out >/dev/null 2>&1; then
     iptables -t raw -A OUTPUT -m set --match-set country_block_out dst -j DROP
+    print_success "Leak Switch: ACTIVATED"
 fi
 
-# 5. BLOCK INBOUND (General Security)
 if ipset list country_block_in >/dev/null 2>&1; then
     iptables -t raw -A PREROUTING -m set --match-set country_block_in src -j DROP
 fi
@@ -386,7 +376,7 @@ check_raw_ultra_resilient "22,443" "Raw Inbound Admin (NOTRACK 22,443)"
 check_raw_ultra_resilient "22,443" "Raw Outbound Admin (NOTRACK 22,443)"
 
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}RAW Outbound Block (Leak Switch)${NC}"
-if iptables-save -t raw 2>/dev/null | grep -qiE "DROP.*country_block_out"; then 
+if iptables-save -t raw 2>/dev/null | grep "country_block_out" | grep -qi "DROP"; then 
     echo -e "${BGREEN}[PASS]${NC}"
 else 
     echo -e "${BRED}[FAIL]${NC}"
