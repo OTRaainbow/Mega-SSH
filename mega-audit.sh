@@ -98,8 +98,12 @@ check_pkg "nginx"
 check_pkg "ipset"
 check_pkg "conntrack"
 check_pkg "iptables-persistent"
-
-echo -e "\n  ${BCYAN}◈ 2. PERFORMANCE & SECURITY LAYERS${NC}"
+ 
+ # Installation Status Check
+ printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Installation Finalized"
+ if grep -q "MEGASSH_INSTALLATION_SUCCESSFUL" /var/log/megassh_install.log 2>/dev/null; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
+ 
+ echo -e "\n  ${BCYAN}◈ 2. PERFORMANCE & SECURITY LAYERS${NC}"
 # Kernel Check
 printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "XanMod Elite Kernel"
 if uname -r | grep -qi "xanmod"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BYELLOW}[STOCK]${NC}"; fi
@@ -172,17 +176,17 @@ OUT_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' 
 if [ -n "$IN_COUNT" ] && [ "$IN_COUNT" -gt 0 ]; then echo -e "${BGREEN}[$IN_COUNT IPs]${NC}"; else echo -e "${BRED}[EMPTY]${NC}"; GLOBAL_FAIL=1; fi
 
 # Check Raw Table Isolation (Directional Precision)
-printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Inbound Admin (dports 22,443)"
-if iptables -t raw -L PREROUTING -n 2>/dev/null | grep -qiE "ACCEPT.*multiport.*dports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Inbound Admin (NOTRACK 22,443)"
+if iptables -t raw -L PREROUTING -n 2>/dev/null | grep -qiE "NOTRACK.*multiport.*dports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
-printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Outbound Admin (sports 22,443)"
-if iptables -t raw -L OUTPUT -n 2>/dev/null | grep -qiE "ACCEPT.*multiport.*sports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Outbound Admin (NOTRACK 22,443)"
+if iptables -t raw -L OUTPUT -n 2>/dev/null | grep -qiE "NOTRACK.*multiport.*sports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
 printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Outbound Block (Leak Switch)"
 if iptables -t raw -L OUTPUT -n | grep -qiE "DROP.*country_block_out"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
-printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Mangle Admin Response (CT ESTAB)"
-if iptables -t mangle -L OUTPUT -n | grep -qiE "ACCEPT.*multiport sports 22,443.*ctstate (ESTABLISHED,RELATED|RELATED,ESTABLISHED)"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Mangle Admin Response (Whitelist)"
+if iptables -t mangle -L OUTPUT -n | grep -qiE "ACCEPT.*multiport sports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
 
 # Check Policy Routing (Table 200)
 printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Blackhole Route (Table 200)"

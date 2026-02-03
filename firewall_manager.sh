@@ -283,10 +283,14 @@ print_step "4/7" "Applying RAW Table Blocking (Directional Precision)..."
 iptables -t raw -F 2>/dev/null
 iptables -t raw -X 2>/dev/null
 
-# 2. ALLOW INBOUND (Admin Connect)
-iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,443 -j ACCEPT
+# 2. PERFORMANCE OPTIMIZATION (NOTRACK Admin/Service Ports)
+# Bypasses conntrack for high-volume SSH/Decoy traffic
+print_info "Injecting RAW table NOTRACK rules for ports 22, 443..."
+iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,443 -j NOTRACK
+iptables -t raw -A OUTPUT -p tcp -m multiport --sports 22,443 -j NOTRACK
 
-# 3. ALLOW OUTBOUND RESPONSE (Admin Reply)
+# 3. ALLOW (Post-NOTRACK logic parity)
+iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,443 -j ACCEPT
 iptables -t raw -A OUTPUT -p tcp -m multiport --sports 22,443 -j ACCEPT
 
 # 4. BLOCK OUTBOUND (Leak Prevention)
@@ -305,8 +309,8 @@ fi
 iptables -t mangle -F
 
 # A. ONLY allow response traffic for YOUR connection (prevents lockout)
-# This prevents Replies from being marked for the blackhole.
-iptables -t mangle -A OUTPUT -p tcp -m multiport --sports 22,443 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+# Note: conntrack check removed because ports 22,443 are NOTRACK
+iptables -t mangle -A OUTPUT -p tcp -m multiport --sports 22,443 -j ACCEPT
 
 # B. MARK all other outbound traffic to blocked countries
 # This forces the packet into the 'Table 200' Blackhole.
@@ -359,13 +363,13 @@ print_step "7/7" "Validating Firewall Configuration..."
 VAL_FAIL=0
 
 # Check RAW table
-if ! iptables -t raw -L PREROUTING -n 2>/dev/null | grep -q "ACCEPT.*22,443"; then
-    print_error "Raw PREROUTING admin rule missing!"
+if ! iptables -t raw -L PREROUTING -n 2>/dev/null | grep -qiE "NOTRACK.*multiport.*dports 22,443"; then
+    print_error "Raw PREROUTING NOTRACK rule missing or mismatched!"
     VAL_FAIL=1
 fi
 
-if ! iptables -t raw -L OUTPUT -n 2>/dev/null | grep -q "ACCEPT.*22,443"; then
-    print_error "Raw OUTPUT admin rule missing!"
+if ! iptables -t raw -L OUTPUT -n 2>/dev/null | grep -qiE "NOTRACK.*multiport.*sports 22,443"; then
+    print_error "Raw OUTPUT NOTRACK rule missing or mismatched!"
     VAL_FAIL=1
 fi
 

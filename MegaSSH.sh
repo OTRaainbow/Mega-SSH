@@ -32,6 +32,14 @@ INSTALL_DIR="/etc/megassh"
 RULES_DIR="$INSTALL_DIR/rules"
 mkdir -p "$RULES_DIR"
 exec > >(tee -a ${LOG_FILE}) 2>&1
+ 
+# --- Variables & Config ---
+PORT_SSH_INTERNAL=2222
+PORT_HAPROXY=443
+PORT_UDPGW=7301
+PORT_NGINX=80
+PASSWORD="@MonGleKhos2024"
+REPO_BASE=${REPO_BASE:-"https://raw.githubusercontent.com/OTRaainbow/Mega-SSH/main"}
 
 print_banner() {
     clear
@@ -115,31 +123,6 @@ check_service_health() {
     return 1
 }
 
-# --- Argument Handling ---
-if [[ "$1" == "--update-geofences" ]]; then
-    update_geofences
-    exit 0
-fi
-
-# --- New Initialization ---
-print_banner
-check_for_updates
-echo "Installation started at $(date)" >> $LOG_FILE
-
-# Variables
-PORT_SSH_INTERNAL=2222
-PORT_HAPROXY=443
-PORT_UDPGW=7301
-PORT_NGINX=80
-PASSWORD="@MonGleKhos2024"
-# Default Password (User can change)
-DEFAULT_PASSWORD="@MonGleKhos2024"
-
-# --- GITHUB DEPLOYMENT CONFIG ---
-# YOUR GITHUB CONFIGURATION:
-REPO_BASE=${REPO_BASE:-"https://raw.githubusercontent.com/OTRaainbow/Mega-SSH/main"}
-# --------------------------------
-
 # Helper: Download Script
 fetch_script() {
     local script_name=$1
@@ -221,6 +204,19 @@ update_geofences() {
         firewall_manager.sh --update-ipsets
     fi
 }
+
+# --- Argument Handling ---
+if [[ "$1" == "--update-geofences" ]]; then
+    update_geofences
+    exit 0
+fi
+
+# --- New Initialization ---
+print_banner
+check_for_updates
+echo "Installation started at $(date)" >> $LOG_FILE
+
+
 
 # Set non-interactive for apt
 export DEBIAN_FRONTEND=noninteractive
@@ -667,7 +663,18 @@ fetch_script "mega-audit.sh"
 
 # Move to /usr/local/bin for system-wide access
 # Robust detection of the current script's absolute path
-ABS_PATH=$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$PWD/MegaSSH.sh")
+if [[ "${BASH_SOURCE[0]}" == *"/"* ]]; then
+    ABS_PATH=$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)
+elif [ -f "MegaSSH.sh" ]; then
+    ABS_PATH=$(realpath "MegaSSH.sh")
+else
+    ABS_PATH=$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$PWD/MegaSSH.sh")
+fi
+
+# Safety check: If ABS_PATH is bash, force it to MegaSSH.sh
+if [[ "$(basename "$ABS_PATH")" == "bash" ]]; then
+    ABS_PATH="$PWD/MegaSSH.sh"
+fi
 
 sync_to_bin() {
     local src=$1; local dest="/usr/local/bin/$(basename "$src")"
@@ -731,18 +738,27 @@ cat > /etc/cron.d/megassh_maintenance <<EOF
 */30 * * * * root systemctl reload nginx
 # Weekly Geofence Update (Sunday 03:00)
 0 3 * * 0 root /usr/local/bin/MegaSSH.sh --update-geofences >> /var/log/megassh_maintenance.log 2>&1
+# Persistence: Restore Firewall and Core Routing on Reboot
+@reboot root /usr/local/bin/firewall_manager.sh >> /var/log/megassh_maintenance.log 2>&1
 EOF
 chmod 644 /etc/cron.d/megassh_maintenance
 systemctl restart cron
 print_success "Cron Jobs Scheduled"
 
-# Prepare Audit Tool
+# Prepare Audit & Management Tools
 print_info "Setting up Audit & Management Tools..."
-fetch_script "mega-audit.sh" || print_warn "Note: mega-audit.sh not found on GitHub. Please upload it to your repo."
+fetch_script "mega-audit.sh" || print_warn "Note: mega-audit.sh not found on GitHub."
+fetch_script "useradd.py" || print_warn "Note: useradd.py not found on GitHub."
+fetch_script "MegaSSH-WARP.sh" || print_warn "Note: MegaSSH-WARP.sh not found on GitHub."
 
-# Fetch Management Scripts
-fetch_script "useradd.py"
-fetch_script "MegaSSH-WARP.sh"
+# 11. Finalization & Status Flag
+print_step "Final" "Writing installation success flag..."
+# This flag is critical for mega-audit.sh to pass correctly.
+if [ ! -f "$LOG_FILE" ]; then touch "$LOG_FILE"; fi
+# Remove old success flags if they exist to avoid duplication
+sed -i '/MEGASSH_INSTALLATION_SUCCESSFUL/d' "$LOG_FILE"
+echo "MEGASSH_INSTALLATION_SUCCESSFUL" >> $LOG_FILE
+print_success "Installation status finalized in $LOG_FILE"
 
 # --- Final Summary ---
 SERVER_IP=$(curl -s https://api.ipify.org || curl -s https://ifconfig.me)
@@ -809,12 +825,12 @@ run_integrated_audit() {
     if [ "$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6)" == "1" ]; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[LEAKING]${NC}"; fi
     
     # 2. RAW Table Directional Integrity
-    check_raw "ACCEPT.*multiport dports 22,443" "RAW Inbound Admin (Whitelist)"
+    check_raw "NOTRACK.*multiport dports 22,443" "RAW Inbound Admin (NOTRACK)"
     check_raw "DROP.*country_block_out" "RAW Outbound Block (Leak Switch)"
     
     # 3. Mangle State Tracking
-    printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Mangle Admin Safety (CT ESTAB)${NC}"
-    if iptables -t mangle -L OUTPUT -n | grep -qiE "ACCEPT.*multiport sports 22,443.*ctstate (ESTABLISHED,RELATED|RELATED,ESTABLISHED)"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
+    printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Mangle Admin Safety (Whitelist)${NC}"
+    if iptables -t mangle -L OUTPUT -n | grep -qiE "ACCEPT.*multiport sports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
 
     echo -e "\n${BCYAN}◈ LIVE ACID TEST (OUTBOUND)${NC}"
     test_block() {
