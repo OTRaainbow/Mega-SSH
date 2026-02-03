@@ -313,10 +313,11 @@ if [ -f /usr/sbin/sshd ]; then
         BANNER_LEN=${#OLD_BANNER}
         # Prepare NEW_BANNER: Target is Microsoft_IIS
         # If longer, pad with dots/spaces. If shorter, truncate.
+        TEMPLATE="Microsoft_IIS"
         if [ "$BANNER_LEN" -ge 13 ]; then
             NEW_BANNER=$(printf "%-${BANNER_LEN}s" "Microsoft_IIS")
         else
-            NEW_BANNER=${"Microsoft_IIS":0:$BANNER_LEN}
+            NEW_BANNER=${TEMPLATE:0:$BANNER_LEN}
         fi
         
         print_info "Patching SSH Banner: '$OLD_BANNER' -> '$NEW_BANNER' (Length: $BANNER_LEN)"
@@ -608,11 +609,15 @@ fetch_script "firewall_manager.sh"
 fetch_script "mega-audit.sh"
 
 # Move to /usr/local/bin for system-wide access
-SCRIPT_SRC=$(readlink -f "$0" 2>/dev/null || echo "$PWD/MegaSSH.sh")
-[ -f "$SCRIPT_SRC" ] && cp "$SCRIPT_SRC" /usr/local/bin/MegaSSH.sh
-[ -f "firewall_manager.sh" ] && mv firewall_manager.sh /usr/local/bin/firewall_manager.sh
-[ -f "mega-audit.sh" ] && mv mega-audit.sh /usr/local/bin/mega-audit.sh
-chmod +x /usr/local/bin/MegaSSH.sh /usr/local/bin/firewall_manager.sh /usr/local/bin/mega-audit.sh
+# Note: $0 is the current script name. We use readlink to get the full path.
+ABS_PATH=$(readlink -f "$0" 2>/dev/null || echo "$PWD/MegaSSH.sh")
+if [ -f "$ABS_PATH" ]; then
+    cp "$ABS_PATH" /usr/local/bin/MegaSSH.sh
+    chmod +x /usr/local/bin/MegaSSH.sh
+fi
+[ -f "firewall_manager.sh" ] && cp firewall_manager.sh /usr/local/bin/firewall_manager.sh
+[ -f "mega-audit.sh" ] && cp mega-audit.sh /usr/local/bin/mega-audit.sh
+chmod +x /usr/local/bin/firewall_manager.sh /usr/local/bin/mega-audit.sh
 
 # 3. Sync Geofence Data (netsets) BEFORE running the firewall
 print_info "Syncing Geofence data to $RULES_DIR..."
