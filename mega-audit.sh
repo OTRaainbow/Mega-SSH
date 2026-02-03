@@ -58,15 +58,15 @@ check_pkg() {
 
 check_service() {
     local name=$1; local port=$2; printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$name ($port)${NC}"
-    if ss -tpln | grep -qE ":$port " || ss -tpln | grep -qE "haproxy.*:$port"; then print_status 0; else print_status 1; echo "Down: $name ($port)" >> "$LOG_FILE"; fi
+    if ss -tpln | grep -qE ":$port " || ss -tpln | grep -qE "haproxy.*:$port" || ss -tpln | grep -qE "shadow-tls.*:$port" || ss -tpln | grep -qE "stunnel.*:$port"; then print_status 0; else print_status 1; echo "Down: $name ($port)" >> "$LOG_FILE"; fi
 }
 
 # START AUDIT
 print_header
 
 echo -e "\n  ${BCYAN}◈ 1. CORE INFRASTRUCTURE (FILES & PKGS)${NC}"
-check_file "/root/MegaSSH.sh"
-check_file "/root/firewall_manager.sh"
+check_file "/usr/local/bin/MegaSSH.sh"
+check_file "/usr/local/bin/firewall_manager.sh"
 check_pkg "haproxy"
 check_pkg "nginx"
 check_pkg "ipset"
@@ -102,6 +102,8 @@ fi
 check_service "HAProxy (Mux)" 443
 check_service "SSH (EagleNet)" 2222
 check_service "UDPGW (BadVPN)" 7301
+check_service "Stunnel (SSL)" 8443
+check_service "ShadowTLS" 9443
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Nginx NJS Support${NC}"
 if nginx -V 2>&1 | grep -qE "(njs|js_module)"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[OFF]${NC}"; fi
 

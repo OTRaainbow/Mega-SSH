@@ -27,7 +27,10 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Helper Functions & Logging
-LOG_FILE="/root/megassh_install.log"
+LOG_FILE="/var/log/megassh_install.log"
+INSTALL_DIR="/etc/megassh"
+RULES_DIR="$INSTALL_DIR/rules"
+mkdir -p "$RULES_DIR"
 exec > >(tee -a ${LOG_FILE}) 2>&1
 
 print_banner() {
@@ -290,20 +293,27 @@ print_step "4/10" "Implementing SSH Stealth & Obfuscation..."
 # Backup and hex-edit binary to report Microsoft_IIS instead of OpenSSH
 if [ -f /usr/sbin/sshd ]; then
     cp /usr/sbin/sshd /usr/sbin/sshd.bak
-    # Padded replacement (must match length of OpenSSH_9.6p1 exactly: 13 chars)
-    # Note: 9.6p1 is 5 characters (prefixing the 8 chars of OpenSSH_). 
-    # This sed is flexible for the version part but relies on the string being present.
-    # We use a broad pattern to match common OpenSSH strings while ensuring the length matches.
-    CURRENT_VER=$(/usr/sbin/sshd -V 2>&1 | grep -o 'OpenSSH_[0-9]\.[0-9]p[0-9]')
-    if [ ! -z "$CURRENT_VER" ]; then
-        # Escape dots for use in sed regex
-        ESCAPED_VER=$(echo "$CURRENT_VER" | sed 's/\./\\./g')
-        sed -i "s/$ESCAPED_VER/Microsoft_IIS/g" /usr/sbin/sshd
-        print_success "SSH Binary Obfuscated (Identifies as Microsoft_IIS)"
+    # Padded replacement (must match length of OpenSSH string exactly)
+    # OpenSSH banners often look like 'OpenSSH_9.6p1' (13 chars)
+    # 'Microsoft_IIS' is also 13 characters.
+    
+    # Check if 'OpenSSH' exists and get its length
+    SSH_BANNER_STR=$(grep -ao "OpenSSH_[^[:space:]]*" /usr/sbin/sshd | head -n1)
+    if [ -n "$SSH_BANNER_STR" ]; then
+        BANNER_LEN=${#SSH_BANNER_STR}
+        NEW_BANNER="Microsoft_IIS"
+        # Pad or truncate to match original length exactly
+        if [ "$BANNER_LEN" -gt 13 ]; then
+            NEW_BANNER=$(printf "%-${BANNER_LEN}s" "Microsoft_IIS")
+        elif [ "$BANNER_LEN" -lt 13 ]; then
+            NEW_BANNER="Microsoft_IIS" # Should ideally match, but 13 is a common baseline
+            NEW_BANNER=${NEW_BANNER:0:$BANNER_LEN}
+        fi
+        
+        sed -i "s/$SSH_BANNER_STR/$NEW_BANNER/g" /usr/sbin/sshd
+        print_success "SSH Binary Obfuscated (Identifies as $NEW_BANNER)"
     else
-        # Fallback to the requested 9.6p1 specifically if detection fails
-        sed -i 's/OpenSSH_9.6p1/Microsoft_IIS/g' /usr/sbin/sshd
-        print_warn "SSH Binary Obfuscated (Manual Match Search)"
+        print_warn "SSH Banner string not found in binary. Skipping obfuscation."
     fi
 fi
 
@@ -576,14 +586,18 @@ download_user_list "cn"
 
 # --- Hardened Geofence Integration (Nuclear Isolation) ---
 print_step "8.1" "Deploying Nuclear Firewall & Total Geofence Isolation..."
-fetch_script "firewall_manager.sh"
-./firewall_manager.sh
+# Fetching the scripts to /root for persistent access
+chmod +x /usr/local/bin/firewall_manager.sh /usr/local/bin/mega-audit.sh
 
-mkdir -p /etc/megassh/rules
-# Move netset files to the hardened rules directory (handled by firewall_manager.sh)
-mv ip2location_country_cn.netset /etc/megassh/rules/cn.netset 2>/dev/null
-mv ip2location_country_ru.netset /etc/megassh/rules/ru.netset 2>/dev/null
-mv ip2location_country_ir.netset /etc/megassh/rules/ir.netset 2>/dev/null
+# AUTOMATIC EXECUTION: No manual intervention required anymore
+print_info "Executing Nuclear Firewall..."
+bash /usr/local/bin/firewall_manager.sh
+
+# Sync netset files to the hardened rules directory
+cp /root/*.netset "$RULES_DIR/" 2>/dev/null
+mv /root/ip2location_country_cn.netset "$RULES_DIR/cn.netset" 2>/dev/null
+mv /root/ip2location_country_ru.netset "$RULES_DIR/ru.netset" 2>/dev/null
+mv /root/ip2location_country_ir.netset "$RULES_DIR/ir.netset" 2>/dev/null
 
 # Note: strict_block.sh is no longer needed separately as it is consolidated into firewall_manager.sh
 

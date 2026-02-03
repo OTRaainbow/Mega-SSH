@@ -140,13 +140,15 @@ EOF
             print_success "XanMod GPG Key & Repo Registered (Source: $CODENAME)."
         else
             print_error "Invalid GPG Key downloaded/embedded (gpg failed to dearmor)."
-            cat /tmp/xanmod.key | head -n 5 
         fi
         rm -f /tmp/xanmod.key
     else
         print_error "Failed to write embedded XanMod GPG Key."
     fi
 fi
+
+# Cleanup old speed-optimizer if exists
+rm -f /root/speed-optimizer.sh /usr/local/bin/speed-optimizer.sh
 
 print_info "Updating apt and installing linux-xanmod-x64v3..."
 # Use non-interactive mode to avoid prompts
@@ -192,8 +194,9 @@ cat > /etc/sysctl.d/99-ssh-direct.conf <<EOF
 # MegaSSH Stable Tuning (optimized for VPS)
 # --- General System ---
 fs.file-max = 1000000
-net.core.netdev_budget = 600
-net.core.netdev_max_backlog = 16384
+fs.nr_open = 1048576
+net.core.netdev_budget = 5000
+net.core.netdev_max_backlog = 65536
 net.core.optmem_max = 65536
 net.core.somaxconn = 65535
 
@@ -209,11 +212,9 @@ net.ipv4.tcp_slow_start_after_idle = 0
 net.ipv4.tcp_mtu_probing = 1
 
 # --- Buffer Sizes (Stability Optimized) ---
-# Previous 64MB was too high for <4GB RAM, causing thrashing. 
-# Reduced to ~16MB Max, which is plenty for 1Gbps.
-net.core.rmem_default = 262144
+net.core.rmem_default = 1048576
 net.core.rmem_max = 16777216
-net.core.wmem_default = 262144
+net.core.wmem_default = 1048576
 net.core.wmem_max = 16777216
 net.ipv4.tcp_rmem = 4096 87380 16777216
 net.ipv4.tcp_wmem = 4096 65536 16777216
@@ -232,12 +233,16 @@ net.ipv6.conf.all.disable_ipv6 = 1
 net.ipv6.conf.default.disable_ipv6 = 1
 net.ipv6.conf.lo.disable_ipv6 = 1
 
-# --- ICMP Tunneling Optimization ---
-# Ignore kernel ICMP echo to allow Pingtunnel to handle them
-net.ipv4.icmp_echo_ignore_all = 1
+# --- Security & Resource Hardening ---
+net.ipv4.tcp_max_syn_backlog = 65535
+net.ipv4.tcp_rfc1337 = 1
+net.ipv4.tcp_syncookies = 1
+net.ipv4.ip_forward = 1
 EOF
 
 sysctl --system > /dev/null
+# Apply to 99-megassh.conf too for backward compatibility/consistency
+cp /etc/sysctl.d/99-ssh-direct.conf /etc/sysctl.d/99-megassh.conf
 print_success "Kernel parameters applied."
 
 # --- Step 4: Hardware Optimization (RSS & RPS) ---
