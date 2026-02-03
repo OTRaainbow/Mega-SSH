@@ -70,6 +70,9 @@ if [ $? -ne 0 ]; then
 fi
 chmod +x /usr/local/bin/shadow-tls
 
+# Use SHADOW_PWD if set, else fallback to megassh (can be set via env or installer)
+SHADOW_PWD=${SHADOW_PWD:-"megassh"}
+
 # 2. Create Service
 print_info "Configuring Service (Port $PORT_SHADOWTLS)..."
 cat > /etc/systemd/system/shadow-tls.service <<EOF
@@ -85,7 +88,7 @@ After=network.target
 # Password: Let's use a random or fixed password. For SSH wrapper, the password is used by the client wrapper.
 # We'll use the same PASSWORD variable style if needed, or a fixed one for the tunnel.
 # ShadowTLS V3 syntax: shadow-tls --fastopen server --listen 0.0.0.0:9443 --server 127.0.0.1:2222 --tls www.microsoft.com:443 --password mypassword
-ExecStart=/usr/local/bin/shadow-tls --fastopen server --listen 0.0.0.0:${PORT_SHADOWTLS} --server 127.0.0.1:${PORT_SSH_INTERNAL} --tls ${HANDSHAKE_DOMAIN} --password megassh
+ExecStart=/usr/local/bin/shadow-tls --fastopen server --listen 0.0.0.0:${PORT_SHADOWTLS} --server 127.0.0.1:${PORT_SSH_INTERNAL} --tls ${HANDSHAKE_DOMAIN} --password ${SHADOW_PWD}
 Restart=always
 User=root
 
@@ -99,4 +102,4 @@ systemctl enable --now shadow-tls
 
 print_success "ShadowTLS Active on Port $PORT_SHADOWTLS."
 print_info "Mimicking: $HANDSHAKE_DOMAIN"
-print_info "Password:  megassh"
+print_info "Password:  ${SHADOW_PWD}"

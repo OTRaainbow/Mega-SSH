@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# MegaSSH Elite Audit (Stability Focus - v6.2)
+# MegaSSH Elite Audit (Stability Focus - v6.3)
 # Features: ICMP Transparent Tunnel Check, Elite UI, Board Rendering
 # ================= project: https://github.com/OTRaainbow/Mega-SSH ============
 
@@ -145,6 +145,14 @@ if nslookup -type=AAAA isna.ir 2>/dev/null | grep -q "has AAAA address"; then
     echo -e "${BRED}[LEAKING]${NC}"; GLOBAL_FAIL=1
 else
     echo -e "${BGREEN}[SECURE]${NC}"
+fi
+
+# Check Maintenance Cron
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Maintenance Cron (Updates)"
+if [ -f /etc/cron.d/megassh_maintenance ] && grep -q "update-geofences" /etc/cron.d/megassh_maintenance; then
+    echo -e "${BGREEN}[PASS]${NC}"
+else
+    echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1
 fi
 
 # Check ip6tables Policy

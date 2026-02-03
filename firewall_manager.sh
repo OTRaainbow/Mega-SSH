@@ -48,7 +48,7 @@ print_warn() {
 }
 
 echo -e "${BBLUE}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BBLUE}║${NC} ${BRED}        NUCLEAR FIREWALL 5.1 - ABSOLUTE PRIORITY PROTECTION           ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC} ${BRED}        NUCLEAR FIREWALL 5.2 - ABSOLUTE PRIORITY PROTECTION           ${BBLUE}║${NC}"
 echo -e "${BBLUE}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
 
 # PRE-FLIGHT CHECKS
@@ -108,6 +108,50 @@ load_to_tmp() {
         return 1
     fi
 }
+
+# --- Atomic IPSet Update Logic ---
+refresh_ipsets_only() {
+    print_step "GEO" "Refreshing IPSets (Atomic Update)..."
+    
+    # Create temporary sets
+    ipset create tmp_upd_in hash:net maxelem 1000000 -exist
+    ipset create tmp_upd_out hash:net maxelem 1000000 -exist
+    ipset flush tmp_upd_in
+    ipset flush tmp_upd_out
+    
+    RULES_DIR="/etc/megassh/rules"
+    
+    # Load manual blocks
+    ipset add tmp_upd_out 94.182.182.0/24 -exist 2>/dev/null
+    ipset add tmp_upd_out 185.143.232.0/22 -exist 2>/dev/null
+    
+    # Load country files
+    for cc in ru cn; do
+        FILE="${RULES_DIR}/${cc}.netset"
+        if [ -f "$FILE" ]; then
+            load_to_tmp "$cc" "$FILE" "tmp_upd_in"
+            load_to_tmp "$cc" "$FILE" "tmp_upd_out"
+        fi
+    done
+    
+    FILE_IR="${RULES_DIR}/ir.netset"
+    if [ -f "$FILE_IR" ]; then
+        load_to_tmp "ir" "$FILE_IR" "tmp_upd_out"
+    fi
+    
+    # Atomic swap
+    ipset swap tmp_upd_in country_block_in 2>/dev/null && print_success "Inbound IPSet Refreshed"
+    ipset swap tmp_upd_out country_block_out 2>/dev/null && print_success "Outbound IPSet Refreshed"
+    
+    # Cleanup
+    ipset destroy tmp_upd_in 2>/dev/null
+    ipset destroy tmp_upd_out 2>/dev/null
+}
+
+if [[ "$1" == "--update-ipsets" ]]; then
+    refresh_ipsets_only
+    exit 0
+fi
 
 # 2. NUCLEAR FLUSH & IPv6 KILL
 print_step "2/7" "Nuclear Flush & IPv6 Killer (Zero-Leak Enforcement)..."

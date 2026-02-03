@@ -44,7 +44,7 @@ print_banner() {
     echo ""
     echo -e "${BPURPLE}  ◈──────────────────────────────────────────────────────────────────◈${NC}"
     echo -e "  ${BPURPLE}│${NC} ${BWHITE}PROJECT:${NC} ${BCYAN}MegaSSH Elite Edition (Stability Focus)${NC}             ${BPURPLE}│${NC}"
-    echo -e "  ${BPURPLE}│${NC} ${BWHITE}VERSION:${NC} ${BCYAN}6.2 (February 2026 Sync)${NC}                            ${BPURPLE}│${NC}"
+    echo -e "  ${BPURPLE}│${NC} ${BWHITE}VERSION:${NC} ${BCYAN}6.3 (February 2026 Sync)${NC}                            ${BPURPLE}│${NC}"
     echo -e "  ${BPURPLE}│${NC} ${BWHITE}TARGET :${NC} ${BCYAN}Ubuntu 24.04 Focal/Noble Balanced${NC}                   ${BPURPLE}│${NC}"
     echo -e "${BPURPLE}  ◈──────────────────────────────────────────────────────────────────◈${NC}"
     echo ""
@@ -115,8 +115,15 @@ check_service_health() {
     return 1
 }
 
-# --- Initialization ---
+# --- Argument Handling ---
+if [[ "$1" == "--update-geofences" ]]; then
+    update_geofences
+    exit 0
+fi
+
+# --- New Initialization ---
 print_banner
+check_for_updates
 echo "Installation started at $(date)" >> $LOG_FILE
 
 # Variables
@@ -124,7 +131,8 @@ PORT_SSH_INTERNAL=2222
 PORT_HAPROXY=443
 PORT_UDPGW=7301
 PORT_NGINX=80
-PASSWORD="@MonGleKhos2024"
+# Default Password (User can change)
+DEFAULT_PASSWORD="@MonGleKhos2024"
 
 # --- GITHUB DEPLOYMENT CONFIG ---
 # YOUR GITHUB CONFIGURATION:
@@ -164,6 +172,53 @@ fetch_script() {
         print_success "Found local file: $script_name"
     fi
     chmod +x "$script_name"
+}
+
+# --- Self-Update Logic ---
+check_for_updates() {
+    print_step "UPDATE" "Checking for script updates..."
+    local remote_version=$(curl -s "${REPO_BASE}/MegaSSH.sh" | grep -o "VERSION:.*BCYAN}[0-9.]*" | grep -o "[0-9.]*$" | head -n1)
+    local local_version="6.3"
+
+    if [ -n "$remote_version" ] && [ "$remote_version" != "$local_version" ]; then
+        print_warn "New version detected: $remote_version (Local: $local_version)"
+        echo -ne "  ${BYELLOW}◈ Would you like to update MegaSSH now? (y/n): ${NC}"
+        read -r update_confirm
+        if [[ "$update_confirm" == [yY] ]]; then
+            print_info "Updating MegaSSH to $remote_version..."
+            wget -q -O "MegaSSH.sh.new" "${REPO_BASE}/MegaSSH.sh"
+            if [ -s "MegaSSH.sh.new" ]; then
+                mv "MegaSSH.sh.new" "MegaSSH.sh"
+                chmod +x "MegaSSH.sh"
+                print_success "Update complete! Please restart the script."
+                exit 0
+            else
+                print_error "Update failed (empty file downloaded)."
+            fi
+        fi
+    else
+        print_success "MegaSSH is up to date (v$local_version)."
+    fi
+}
+
+update_geofences() {
+    print_step "GEO" "Updating Geofence Blocklists..."
+    for cc in ir ru cn; do
+        local url="https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/ip2location_country/ip2location_country_${cc}.netset"
+        print_info "Downloading fresh $cc list..."
+        wget -q -O "$RULES_DIR/${cc}.netset.new" "$url"
+        if [ -s "$RULES_DIR/${cc}.netset.new" ] && ! grep -q "<!DOCTYPE html>" "$RULES_DIR/${cc}.netset.new"; then
+            mv "$RULES_DIR/${cc}.netset.new" "$RULES_DIR/${cc}.netset"
+            print_success "Updated ${cc}.netset"
+        else
+            print_error "Failed to update ${cc}.netset (Invalid data or download error)"
+            rm -f "$RULES_DIR/${cc}.netset.new"
+        fi
+    done
+    # Trigger firewall reload if active
+    if command -v firewall_manager.sh >/dev/null; then
+        firewall_manager.sh --update-ipsets
+    fi
 }
 
 # Set non-interactive for apt
@@ -279,9 +334,15 @@ if ! command -v haproxy > /dev/null; then
     exit 1
 fi
 
-# Set Root Password
-echo -e "$PASSWORD\n$PASSWORD" | passwd root >> $LOG_FILE 2>&1
-print_success "Root Password Set"
+# Set Root Password (Optional Prompt)
+echo -e "${BYELLOW}◈ Set new root password? (leave empty to keep current): ${NC}"
+read -s -r USER_PASS
+if [ -n "$USER_PASS" ]; then
+    echo -e "$USER_PASS\n$USER_PASS" | passwd root >> $LOG_FILE 2>&1
+    print_success "Root Password Updated"
+else
+    print_info "Root password remains unchanged."
+fi
 
 # 2. System Optimizations (External)
 print_step "2/10" "Applying Kernel Optimizations (XanMod + Hz BBRv3)..."
@@ -672,7 +733,8 @@ cat > /etc/cron.d/megassh_maintenance <<EOF
 # MegaSSH Maintenance Jobs
 # Reload Nginx to keep logs fresh and config active
 */30 * * * * root systemctl reload nginx
-# Note: Host key cycling and drop_caches removed for better stability in 2024+
+# Weekly Geofence Update (Sunday 03:00)
+0 3 * * 0 root /usr/local/bin/MegaSSH.sh --update-geofences >> /var/log/megassh_maintenance.log 2>&1
 EOF
 chmod 644 /etc/cron.d/megassh_maintenance
 systemctl restart cron

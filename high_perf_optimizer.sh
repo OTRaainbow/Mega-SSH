@@ -173,6 +173,7 @@ if ! grep -q "tmpfs /var/log" /etc/fstab; then
         echo "tmpfs /var/log tmpfs defaults,noatime,nosuid,nodev,noexec,mode=0755,size=256m 0 0" >> /etc/fstab
         mount /var/log || echo -e "${RED}[!] Failed to mount /var/log as tmpfs${NC}"
         print_success "/var/log mounted as tmpfs."
+        print_warn "IMPORTANT: Logs are now stored in RAM. They will be LOST on reboot."
     fi
 else
     print_success "/var/log already configured as tmpfs."
