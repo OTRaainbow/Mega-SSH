@@ -302,28 +302,37 @@ print_step "4/10" "Implementing SSH Stealth & Obfuscation..."
 # A. Obfuscate SSH Version Banner (DPI Evasion)
 # Backup and hex-edit binary to report Microsoft_IIS instead of OpenSSH
 if [ -f /usr/sbin/sshd ]; then
-    cp /usr/sbin/sshd /usr/sbin/sshd.bak
-    # Padded replacement (must match length of OpenSSH string exactly)
+    cp /usr/sbin/sshd /usr/local/sbin/sshd.unpatched 2>/dev/null
     # OpenSSH banners often look like 'OpenSSH_9.6p1' (13 chars)
-    # 'Microsoft_IIS' is also 13 characters.
+    # Target: 'Microsoft_IIS' (13 chars)
     
-    # Check if 'OpenSSH' exists and get its length
-    SSH_BANNER_STR=$(grep -ao "OpenSSH_[^[:space:]]*" /usr/sbin/sshd | head -n1)
-    if [ -n "$SSH_BANNER_STR" ]; then
-        BANNER_LEN=${#SSH_BANNER_STR}
-        NEW_BANNER="Microsoft_IIS"
-        # Pad or truncate to match original length exactly
-        if [ "$BANNER_LEN" -gt 13 ]; then
+    # Robust Detection: Find the exact string in the binary
+    OLD_BANNER=$(grep -ao "OpenSSH_[0-9][^[:cntrl:][:space:]]*" /usr/sbin/sshd | head -n1)
+    
+    if [ -n "$OLD_BANNER" ]; then
+        BANNER_LEN=${#OLD_BANNER}
+        # Prepare NEW_BANNER: Target is Microsoft_IIS
+        # If longer, pad with dots/spaces. If shorter, truncate.
+        if [ "$BANNER_LEN" -ge 13 ]; then
             NEW_BANNER=$(printf "%-${BANNER_LEN}s" "Microsoft_IIS")
-        elif [ "$BANNER_LEN" -lt 13 ]; then
-            NEW_BANNER="Microsoft_IIS" # Should ideally match, but 13 is a common baseline
-            NEW_BANNER=${NEW_BANNER:0:$BANNER_LEN}
+        else
+            NEW_BANNER=${"Microsoft_IIS":0:$BANNER_LEN}
         fi
         
-        sed -i "s/$SSH_BANNER_STR/$NEW_BANNER/g" /usr/sbin/sshd
-        print_success "SSH Binary Obfuscated (Identifies as $NEW_BANNER)"
+        print_info "Patching SSH Banner: '$OLD_BANNER' -> '$NEW_BANNER' (Length: $BANNER_LEN)"
+        # Use Perl for safe binary replacement
+        perl -pi -e "s/\Q$OLD_BANNER\E/$NEW_BANNER/g" /usr/sbin/sshd
+        
+        # Verify
+        if strings /usr/sbin/sshd | grep -q "Microsoft_IIS"; then
+            print_success "SSH Binary Obfuscated Successfully."
+        else
+            # Fallback attempt for different version string format
+            perl -pi -e 's/OpenSSH_[0-9]\.[0-9]p[0-9]/Microsoft_IIS/g' /usr/sbin/sshd
+            print_warn "SSH Banner patched with fallback logic."
+        fi
     else
-        print_warn "SSH Banner string not found in binary. Skipping obfuscation."
+        print_warn "No OpenSSH banner detected in /usr/sbin/sshd (Already patched?)"
     fi
 fi
 

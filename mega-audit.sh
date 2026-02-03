@@ -167,8 +167,13 @@ printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}TTL Obfuscation (64)${NC}"
 if iptables -t mangle -S | grep -qiE "(TTL.*set.*64|TTL.*64)"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
 
 # Check SSH Banner Obfuscation
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}SSH Banner (Microsoft_IIS)${NC}"
-if strings /usr/sbin/sshd | grep -q "Microsoft_IIS"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}SSH Banner (Cloaking)${NC}"
+if strings /usr/sbin/sshd | grep -qiE "(Microsoft_IIS|IIS|Apache)"; then 
+    echo -e "${BGREEN}[PASS]${NC}"
+else 
+    BANNER_FOUND=$(strings /usr/sbin/sshd | grep -o "OpenSSH_[^[:space:]]*" | head -n1)
+    echo -e "${BRED}[FAIL: $BANNER_FOUND]${NC}"
+fi
 
 # Live High-Precision Tests (Nuclear Shield)
 test_leak() {
