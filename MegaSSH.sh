@@ -559,6 +559,7 @@ cat > /usr/share/nginx/html/index.html <<EOF
 EOF
 # Ensure Log Directory Exists (Manual for current session)
 mkdir -p /var/log/nginx
+touch /var/log/nginx/error.log
 chown -R www-data:www-data /var/log/nginx
 
 # Create the Systemd Override (The Permanent Fix)
@@ -567,6 +568,7 @@ cat > /etc/systemd/system/nginx.service.d/override.conf <<EOF
 [Service]
 # Force creation of log folder before Nginx starts
 ExecStartPre=/usr/bin/mkdir -p /var/log/nginx
+ExecStartPre=/usr/bin/touch /var/log/nginx/error.log
 ExecStartPre=/usr/bin/chown -R www-data:www-data /var/log/nginx
 EOF
 systemctl daemon-reload
@@ -575,11 +577,10 @@ systemctl daemon-reload
 cat > /etc/nginx/sites-available/default <<EOF
 server {
     listen 80;
-    listen 8080; 
-    listen [::]:80;
+    listen 127.0.0.1:8080;
     server_name _;
     
-    # Redirect all traffic to Digikala (Decoy)
+    # Decoy Site Redirection
     return 301 https://www.digikala.com\$request_uri;
 }
 EOF
@@ -793,12 +794,18 @@ systemctl restart haproxy
 
 # 13. Check status
 echo "---------------------------------------------"
-echo "Checking Ports (Should see nginx on 8080)..."
-ss -tlnp | grep nginx
+echo "Checking Decoy Port (8080):"
+if ss -tlnp | grep -q ":8080 "; then
+    echo -e "\033[1;32m[PASS] Nginx is listening on 8080.\033[0m"
+else
+    echo -e "\033[1;31m[FAIL] Nginx is NOT on 8080. Config mismatch!\033[0m"
+fi
+
 echo "---------------------------------------------"
-systemctl status haproxy --no-pager
+systemctl status haproxy --no-pager | grep "Active:"
 echo "---------------------------------------------"
 systemctl status nginx --no-pager | grep "Active:"
+echo "---------------------------------------------"
 print_success "Installation status finalized in $LOG_FILE"
 
 # --- Final Summary ---
