@@ -609,15 +609,30 @@ fetch_script "firewall_manager.sh"
 fetch_script "mega-audit.sh"
 
 # Move to /usr/local/bin for system-wide access
-# Note: $0 is the current script name. We use readlink to get the full path.
-ABS_PATH=$(readlink -f "$0" 2>/dev/null || echo "$PWD/MegaSSH.sh")
-if [ -f "$ABS_PATH" ]; then
-    cp "$ABS_PATH" /usr/local/bin/MegaSSH.sh
-    chmod +x /usr/local/bin/MegaSSH.sh
-fi
-[ -f "firewall_manager.sh" ] && cp firewall_manager.sh /usr/local/bin/firewall_manager.sh
-[ -f "mega-audit.sh" ] && cp mega-audit.sh /usr/local/bin/mega-audit.sh
-chmod +x /usr/local/bin/firewall_manager.sh /usr/local/bin/mega-audit.sh
+# Robust detection of the current script's absolute path
+ABS_PATH=$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$PWD/MegaSSH.sh")
+
+sync_to_bin() {
+    local src=$1; local dest="/usr/local/bin/$(basename "$src")"
+    if [ -f "$src" ]; then
+        cp "$src" "$dest"
+        chmod +x "$dest"
+        if [ ! -x "$dest" ]; then
+            print_error "Failed to install $src to $dest or set permissions."
+            return 1
+        fi
+        return 0
+    else
+        print_warn "Source file $src not found for synchronization."
+        return 1
+    fi
+}
+
+print_info "Synchronizing core scripts to /usr/local/bin..."
+sync_to_bin "$ABS_PATH"
+sync_to_bin "firewall_manager.sh"
+sync_to_bin "mega-audit.sh"
+
 
 # 3. Sync Geofence Data (netsets) BEFORE running the firewall
 print_info "Syncing Geofence data to $RULES_DIR..."

@@ -50,16 +50,29 @@ check_file() {
     local target_file=$1; local base=$(basename "$target_file")
     printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$base${NC}"
     
+    local found_at=""
     # Precise hierarchy search
-    if [ -f "/usr/local/bin/$base" ] || [ -f "/root/$base" ] || [ -f "$PWD/$base" ] || [ -f "$target_file" ]; then 
+    if [ -x "/usr/local/bin/$base" ]; then found_at="/usr/local/bin/$base"
+    elif [ -x "/root/$base" ]; then found_at="/root/$base"
+    elif [ -x "$PWD/$base" ]; then found_at="$PWD/$base"
+    elif [ -x "$target_file" ]; then found_at="$target_file"
+    fi
+
+    if [ -n "$found_at" ]; then
         print_status 0
-    else 
-        # Final desperate search using find (top levels only for speed)
-        FOUND_PATH=$(find /usr/local/bin /root "$PWD" -maxdepth 1 -name "$base" 2>/dev/null | head -n1)
-        if [ -n "$FOUND_PATH" ]; then
-            print_status 0
+    else
+        # Check if it exists but isn't executable
+        if [ -f "/usr/local/bin/$base" ] || [ -f "/root/$base" ] || [ -f "$PWD/$base" ] || [ -f "$target_file" ]; then
+             print_status 1
+             echo "Permission Error: $base exists but is NOT executable." >> "$LOG_FILE"
         else
-            print_status 1; echo "Critical Missing: $base (Scanned /usr/local/bin, /root, $PWD)" >> "$LOG_FILE"
+            # Final search using find (top levels only)
+            FOUND_PATH=$(find /usr/local/bin /root "$PWD" -maxdepth 1 -name "$base" 2>/dev/null | head -n1)
+            if [ -n "$FOUND_PATH" ]; then
+                if [ -x "$FOUND_PATH" ]; then print_status 0; else print_status 1; echo "Permission Error: $FOUND_PATH is not executable" >> "$LOG_FILE"; fi
+            else
+                print_status 1; echo "Critical Missing: $base (Scanned /usr/local/bin, /root, $PWD)" >> "$LOG_FILE"
+            fi
         fi
     fi
 }
