@@ -567,12 +567,11 @@ chown -R www-data:www-data /var/log/nginx
 cat > /etc/nginx/sites-available/default <<EOF
 server {
     listen 80;
-    listen 8080; # Internal access via HAProxy
+    listen 8080; 
     listen [::]:80;
     server_name _;
     
-    # Decoy Redirect Logic
-    # Redirect ALL traffic to Digikala
+    # Redirect all traffic to Digikala (Decoy)
     return 301 https://www.digikala.com\$request_uri;
 }
 EOF
@@ -595,9 +594,7 @@ print_success "Nginx Decoy Live (Port 80)"
 print_step "6/10" "Configuring HAProxy Split-Stream (Port 443 -> SSH Default)..."
 cat > /etc/haproxy/haproxy.cfg <<EOF
 global
-    # Version 3.3.2 optimizations
     maxconn 100000
-    # nbthread removed for auto-detection (Prevents High CPU on small VPS)
     hard-stop-after 5s
     log /dev/log local0
     log /dev/log local1 notice
@@ -606,7 +603,7 @@ global
     stats timeout 30s
     user haproxy
     group haproxy
-    daemon
+    # daemon removed to fix systemd warning
 defaults
     log     global
     mode    tcp
@@ -615,44 +612,27 @@ defaults
     timeout connect 4s
     timeout client  1h
     timeout server  1h
-frontend stats
-    mode http
-    bind *:8404
-    stats enable
-    stats uri /stats
-    stats refresh 10s
 frontend multiplexer_443
     bind *:${PORT_HAPROXY}
     mode tcp
-    # 5s Delay: Increases invisibility to scanners.
-    # Server waits for client to speak first (Silent entry).
     tcp-request inspect-delay 5s
     
-    # ACLs for Traffic Identification
-    # Match SSL/TLS ClientHello (ContentType 22 / 0x16)
+    # FIX: Accept content rule MUST be before routing decisions
+    tcp-request content accept if { req.len gt 0 }
+
+    # ACLs
     acl is_ssl payload(0,1) -m bin 16
-    # Match HTTP methods (simplified check)
     acl is_http req.proto_http
     
-    # Routing Logic:
-    # If it looks like SSL or HTTP, send to Decoy (Nginx)
+    # Routing
     use_backend web_decoy_backend if is_ssl
     use_backend web_decoy_backend if is_http
-    
-    # "Silent" Entry Logic: 
-    # Only route to SSH if specific byte sequence or content is detected,
-    # or if the delay expires without looking like web traffic.
-    tcp-request content accept if { req.len gt 0 }
-    
-    # Default Fallback -> SSH
     default_backend ssh_backend
 
 backend ssh_backend
     mode tcp
-    # Option 'abortonclose' helps clear zombie DPI probes
     option abortonclose
     balance roundrobin
-    # REMOVED 'check' to avoid false positive health failures causing EOF
     server ssh_srv_1 127.0.0.1:2222
     server ssh_srv_2 127.0.0.1:2223
     server ssh_srv_3 127.0.0.1:2224
@@ -798,6 +778,17 @@ if [ ! -f "$LOG_FILE" ]; then touch "$LOG_FILE"; fi
 sed -i '/MEGASSH_INSTALLATION_SUCCESSFUL/d' "$LOG_FILE"
 
 echo "MEGASSH_INSTALLATION_SUCCESSFUL" >> $LOG_FILE
+
+# 12. Apply Changes
+systemctl reload nginx
+systemctl restart haproxy
+
+# 13. Check status
+echo "---------------------------------------------"
+echo "Checking Ports (Should see nginx on 8080)..."
+ss -tlnp | grep nginx
+echo "---------------------------------------------"
+systemctl status haproxy --no-pager
 print_success "Installation status finalized in $LOG_FILE"
 
 # --- Final Summary ---
