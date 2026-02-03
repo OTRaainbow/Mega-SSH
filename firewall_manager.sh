@@ -56,28 +56,21 @@ print_step "1/7" "Initializing IPSets..."
 ipset create country_block_in hash:net maxelem 1000000 -exist
 ipset create country_block_out hash:net maxelem 1000000 -exist
 
-load_set_nuclear() {
-    local cc=$1; local file=$2; local target_set=$3
-    if [ ! -s "$file" ]; then print_error "Error: $file is empty!"; return 1; fi
+# Temporary sets for atomic aggregation
+ipset create tmp_block_in hash:net maxelem 1000000 -exist
+ipset create tmp_block_out hash:net maxelem 1000000 -exist
+ipset flush tmp_block_in
+ipset flush tmp_block_out
+
+load_to_tmp() {
+    local cc=$1; local file=$2; local target_tmp=$3
+    if [ ! -s "$file" ]; then print_warn "Warning: $file is empty or missing!"; return 1; fi
     if head -n 5 "$file" | grep -q "<!DOCTYPE html>"; then print_error "Error: $file is HTML!"; return 1; fi
 
-    local tmp_set="tmp_${target_set}_${cc}"
-    print_info "Injecting $cc data into $target_set (atomic)..."
-    
-    # Create temporary set for atomic swap
-    ipset create "$tmp_set" hash:net maxelem 1000000 -exist
-    ipset flush "$tmp_set"
-
+    print_info "Loading $cc data into $target_tmp..."
     (
-        grep -v '^#' "$file" | tr -d '\r' | awk -v set="$tmp_set" 'NF {print "add " set " " $1}'
+        grep -v '^#' "$file" | tr -d '\r' | awk -v set="$target_tmp" 'NF {print "add " set " " $1}'
     ) | ipset restore -exist 2>/dev/null
-    
-    # Swap and clean up
-    ipset swap "$tmp_set" "$target_set" 2>/dev/null
-    ipset destroy "$tmp_set" 2>/dev/null
-    
-    local count=$(ipset list "$target_set" | grep 'Number of entries' | awk '{print $4}')
-    print_success "($count entries)"
 }
 
 # 2. NUCLEAR FLUSH & IPv6 KILL
@@ -105,22 +98,33 @@ iptables -t nat -F
 iptables -t mangle -F
 iptables -t raw -F
 
-# 1. Block RU and CN (Both Inbound and Outbound) - "Nuclear Isolation"
+# --- Aggregate Country Blocks ---
+print_step "2.1" "Aggregating Geofence Data..."
+# Block RU and CN (Both Inbound and Outbound)
 for cc in ru cn; do
     FILE="ip2location_country_${cc}.netset"
-    # Redundancy check in multiple possible locations
     [ ! -f "$FILE" ] && FILE="/etc/megassh/rules/${cc}.netset"
-    
-    load_set_nuclear "$cc" "$FILE" "country_block_in"
-    load_set_nuclear "$cc" "$FILE" "country_block_out"
+    load_to_tmp "$cc" "$FILE" "tmp_block_in"
+    load_to_tmp "$cc" "$FILE" "tmp_block_out"
 done
 
-# 2. Block Iran (IR) - OUTBOUND ONLY
+# Block Iran (IR) - OUTBOUND ONLY
 FILE_IR="ip2location_country_ir.netset"
 [ ! -f "$FILE_IR" ] && FILE_IR="/etc/megassh/rules/ir.netset"
-load_set_nuclear "ir" "$FILE_IR" "country_block_out"
+load_to_tmp "ir" "$FILE_IR" "tmp_block_out"
 
-# 2.5 LOAD CUSTOM USER RULES (ufw-user-*)
+# Atomic Swap
+print_info "Finalizing Nuclear Shield (Atomic Swap)..."
+ipset swap tmp_block_in country_block_in
+ipset swap tmp_block_out country_block_out
+ipset destroy tmp_block_in 2>/dev/null
+ipset destroy tmp_block_out 2>/dev/null
+
+IN_COUNT=$(ipset list country_block_in | grep 'Number of entries' | awk '{print $4}')
+OUT_COUNT=$(ipset list country_block_out | grep 'Number of entries' | awk '{print $4}')
+print_success "Shield Active: $IN_COUNT Inbound / $OUT_COUNT Outbound IPs blocked."
+
+# 2.5 LOAD CUSTOM USER RULES
 if [ -f "user.rules" ]; then
     print_step "2.5" "Loading custom user.rules..."
     for chain in ufw-user-input ufw-user-output ufw-user-forward ufw-before-logging-input ufw-before-logging-output ufw-before-logging-forward ufw-user-logging-input ufw-user-logging-output ufw-user-logging-forward ufw-after-logging-input ufw-after-logging-output ufw-after-logging-forward ufw-logging-deny ufw-logging-allow ufw-user-limit ufw-user-limit-accept; do
