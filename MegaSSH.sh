@@ -557,11 +557,19 @@ cat > /usr/share/nginx/html/index.html <<EOF
 </body>
 </html>
 EOF
-# Ensure Log Directory Exists
+# Ensure Log Directory Exists (Manual for current session)
 mkdir -p /var/log/nginx
-touch /var/log/nginx/access.log
-touch /var/log/nginx/error.log
 chown -R www-data:www-data /var/log/nginx
+
+# Create the Systemd Override (The Permanent Fix)
+mkdir -p /etc/systemd/system/nginx.service.d
+cat > /etc/systemd/system/nginx.service.d/override.conf <<EOF
+[Service]
+# Force creation of log folder before Nginx starts
+ExecStartPre=/usr/bin/mkdir -p /var/log/nginx
+ExecStartPre=/usr/bin/chown -R www-data:www-data /var/log/nginx
+EOF
+systemctl daemon-reload
 
 # Nginx Config
 cat > /etc/nginx/sites-available/default <<EOF
@@ -789,6 +797,8 @@ echo "Checking Ports (Should see nginx on 8080)..."
 ss -tlnp | grep nginx
 echo "---------------------------------------------"
 systemctl status haproxy --no-pager
+echo "---------------------------------------------"
+systemctl status nginx --no-pager | grep "Active:"
 print_success "Installation status finalized in $LOG_FILE"
 
 # --- Final Summary ---
