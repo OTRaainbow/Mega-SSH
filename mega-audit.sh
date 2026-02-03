@@ -181,13 +181,13 @@ test_leak() {
     local ret=$?
     
     if [ $ret -eq 0 ]; then
-        echo -e "${BRED}[LEAKED]${NC}"
+        echo -e "${BRED}[PROHIBITED]${NC}"
         echo "Leak detected on $label:" >> "$LOG_FILE"
         echo "$output" | head -n 5 >> "$LOG_FILE"
         GLOBAL_FAIL=1
     elif echo "$output" | grep -qi "ArvanCloud"; then
-        echo -e "${BRED}[AK-LEAK]${NC}" # ArvanCloud Leak
-        echo "ArvanCloud Leak on $label" >> "$LOG_FILE"
+        echo -e "${BRED}[AK-BYPASS]${NC}" # ArvanCloud Bypass
+        echo "ArvanCloud Bypass on $label" >> "$LOG_FILE"
         GLOBAL_FAIL=1
     elif [ $ret -eq 28 ] || [ $ret -eq 7 ] || [ $ret -eq 3 ] || [ $ret -eq 6 ]; then
         echo -e "${BGREEN}[SECURE]${NC}"

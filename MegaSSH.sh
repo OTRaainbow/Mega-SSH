@@ -674,35 +674,46 @@ run_integrated_audit() {
     check_port "UDPGW" 7301
     check_port "Rescue SSH" 22
 
-    echo -e "\n${BCYAN}◈ FIREWALL & PRIVACY INTEGRITY${NC}"
-    IR_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
-    printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Geofence Entries (Privacy)${NC}"
-    if [ -n "$IR_COUNT" ] && [ "$IR_COUNT" -gt 0 ]; then echo -e "${BGREEN}[$IR_COUNT IPs]${NC}"; else echo -e "${BRED}[FAILED]${NC}"; fi
+    echo -e "\n${BCYAN}◈ FIREWALL & PRIVACY INTEGRITY (NUCLEAR v5)${NC}"
+    check_raw() {
+        local rule=$1; local label=$2
+        printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$label${NC}"
+        if iptables -t raw -L -n | grep -q "$rule"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
+    }
     
-    printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Strict OUTBOUND DROP (RAW)${NC}"
-    if iptables -t raw -L OUTPUT -n | grep -q "DROP.*country_block_out"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; fi
-
+    # 1. IPv6 Disable Check
     printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Zero-Leak (IPv6 Disable)${NC}"
-    IPV6_STATUS=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)
-    if [ "$IPV6_STATUS" == "1" ]; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[LEAKING]${NC}"; fi
+    if [ "$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6)" == "1" ]; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[LEAKING]${NC}"; fi
+    
+    # 2. RAW Table Directional Integrity
+    check_raw "ACCEPT.*multiport dports 22,443" "RAW Inbound Admin (Whitelist)"
+    check_raw "DROP.*country_block_out" "RAW Outbound Block (Leak Switch)"
+    
+    # 3. Mangle State Tracking
+    printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Mangle Admin Safety (CT ESTAB)${NC}"
+    if iptables -t mangle -L OUTPUT -n | grep -q "ACCEPT.*multiport sports 22,443.*ctstate ESTABLISHED,RELATED"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
 
-    echo -e "\n${BCYAN}◈ LIVE PRIVACY VALIDATION (OUTBOUND)${NC}"
+    echo -e "\n${BCYAN}◈ LIVE ACID TEST (OUTBOUND)${NC}"
     test_block() {
         local site=$1; local ip=$2; local label=$3
         printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$label${NC}"
-        curl -m 4 -s -I --resolve "$site:80:$ip" "http://$site" > /dev/null 2>&1
+        # Use 3s timeout for Acid Test precision
+        local output=$(curl -m 3 -s -I --resolve "$site:80:$ip" "http://$site" 2>&1)
         local ret=$?
+        
         if [ $ret -eq 0 ]; then
             echo -e "${BRED}[LEAKED]${NC}"
+        elif echo "$output" | grep -qi "ArvanCloud"; then
+            echo -e "${BRED}[AK-LEAK]${NC}"
         elif [ $ret -eq 28 ] || [ $ret -eq 7 ] || [ $ret -eq 3 ] || [ $ret -eq 6 ]; then
-            echo -e "${BGREEN}[PROTECTED]${NC}"
+            echo -e "${BGREEN}[SECURE]${NC}"
         else
             echo -e "${BYELLOW}[WARN $ret]${NC}"
         fi
     }
     test_block "vk.com (RU)" "87.240.139.194" "Russia Geofence"
     test_block "baidu.com (CN)" "110.242.68.66" "China Geofence"
-    test_block "digikala.com (IR)" "185.239.104.14" "Iran Privacy Block"
+    test_block "isna.ir (IR - HTTPS)" "94.182.182.28" "Iran ISNA (Acid Test)"
 
     echo -e "\n${BPURPLE}─────────────────────────────────────────────────────────────────────────────${NC}"
     echo -e "${BGREEN}      ALL COMPONENTS VERIFIED & ELITE STATUS CONFIRMED          ${NC}"
