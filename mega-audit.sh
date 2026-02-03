@@ -71,6 +71,8 @@ check_file "pingtunnel_manager.sh"
 check_pkg "haproxy"
 check_pkg "nginx"
 check_pkg "ipset"
+check_pkg "conntrack"
+check_pkg "iptables-persistent"
 
 echo -e "\n  ${BCYAN}◈ 2. PERFORMANCE & SECURITY LAYERS${NC}"
 # Kernel Check
@@ -106,13 +108,24 @@ if nginx -V 2>&1 | grep -q "ngx_http_js_module"; then echo -e "${BGREEN}[ACTIVE]
 # Pingtunnel removed for TCP Direct purity
 
 echo -e "\n  ${BCYAN}◈ 3. NUCLEAR FIREWALL INTEGRITY${NC}"
-# Check IPv6
+# Check IPv6 Status
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Zero-Leak (IPv6 Disable)${NC}"
 if [ "$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)" == "1" ]; then print_status 0; else print_status 1; fi
 
+# Check DNS IPv6 Leak (The "Acid Test" part 1)
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}DNS IPv6 Leak (ISNA)${NC}"
+# Use specifically targeted nslookup to look for AAAA records
+if nslookup -type=AAAA isna.ir 2>/dev/null | grep -q "has AAAA address"; then
+    echo -e "${BRED}[LEAKING]${NC}"; GLOBAL_FAIL=1
+else
+    echo -e "${BGREEN}[SECURE]${NC}"
+fi
+
 # Check ip6tables Policy
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}ip6tables Mandatory DROP${NC}"
-if ip6tables -L -n 2>/dev/null | grep -q "Chain INPUT (policy DROP)" && ip6tables -L -n 2>/dev/null | grep -q "Chain OUTPUT (policy DROP)"; then
+if ip6tables -L -n 2>/dev/null | grep -q "Chain INPUT (policy DROP)" && \
+   ip6tables -L -n 2>/dev/null | grep -q "Chain OUTPUT (policy DROP)" && \
+   ip6tables -L -n 2>/dev/null | grep -q "Chain FORWARD (policy DROP)"; then
     echo -e "${BGREEN}[ACTIVE]${NC}"
 else
     echo -e "${BRED}[OPEN]${NC}"; GLOBAL_FAIL=1
@@ -179,7 +192,8 @@ test_leak() {
 
 test_leak "vk.com (RU)" "87.240.139.194" "Russia Geofence"
 test_leak "baidu.com (CN)" "110.242.68.66" "China Geofence"
-test_leak "isna.ir (IR)" "94.182.182.28" "Iran ISNA Privacy Block"
+test_leak "isna.ir (IR - HTTP)" "94.182.182.28" "Iran ISNA Privacy Block"
+test_leak "isna.ir (IR - HTTPS)" "94.182.182.28" "Iran ISNA HTTPS (Acid Test)"
 test_leak "snapp.ir (IR)" "185.239.104.14" "Iran Snapp Privacy Block"
 
 # FINAL VERDICT
