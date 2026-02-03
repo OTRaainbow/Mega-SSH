@@ -48,8 +48,20 @@ print_warn() {
 }
 
 echo -e "${BBLUE}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BBLUE}║${NC} ${BRED}        NUCLEAR FIREWALL 5.0 - ABSOLUTE PRIORITY PROTECTION           ${BBLUE}║${NC}"
+echo -e "${BBLUE}║${NC} ${BRED}        NUCLEAR FIREWALL 5.1 - ABSOLUTE PRIORITY PROTECTION           ${BBLUE}║${NC}"
 echo -e "${BBLUE}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
+
+# PRE-FLIGHT CHECKS
+print_step "0/7" "Running Pre-flight Checks..."
+if ! command -v ipset >/dev/null 2>&1; then
+    print_error "ipset is not installed! Install with: apt install ipset"
+    exit 1
+fi
+if ! command -v iptables >/dev/null 2>&1; then
+    print_error "iptables is not installed! Install with: apt install iptables"
+    exit 1
+fi
+print_success "Core utilities verified (ipset, iptables)"
 
 # 1. Setup IPSets
 print_step "1/7" "Initializing IPSets..."
@@ -72,13 +84,29 @@ ipset add tmp_block_out 2.188.0.0/16 -exist 2>/dev/null # Iran wide block backup
 
 load_to_tmp() {
     local cc=$1; local file=$2; local target_tmp=$3
-    if [ ! -s "$file" ]; then print_warn "Warning: $file is empty or missing!"; return 1; fi
-    if head -n 5 "$file" | grep -q "<!DOCTYPE html>"; then print_error "Error: $file is HTML!"; return 1; fi
+    if [ ! -s "$file" ]; then 
+        print_warn "Warning: $file is empty or missing! Skipping $cc."
+        return 1
+    fi
+    if head -n 5 "$file" 2>/dev/null | grep -q "<!DOCTYPE html>"; then 
+        print_error "Error: $file is HTML! Skipping $cc."
+        return 1
+    fi
 
     print_info "Loading $cc data into $target_tmp..."
+    local count_before=$(ipset list "$target_tmp" 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
     (
         grep -v '^#' "$file" | tr -d '\r' | awk -v set="$target_tmp" 'NF {print "add " set " " $1}'
     ) | ipset restore -exist 2>/dev/null
+    local count_after=$(ipset list "$target_tmp" 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
+    local added=$((count_after - count_before))
+    if [ "$added" -gt 0 ]; then
+        print_success "Loaded $added IPs from $cc into $target_tmp"
+        return 0
+    else
+        print_warn "No IPs loaded from $file"
+        return 1
+    fi
 }
 
 # 2. NUCLEAR FLUSH & IPv6 KILL
@@ -110,36 +138,67 @@ iptables -t raw -F
 print_step "2.1" "Aggregating Geofence Data..."
 # Block RU and CN (Both Inbound and Outbound)
 RULES_DIR="/etc/megassh/rules"
+LOADED_ANY=0
+
 for cc in ru cn; do
     # Try all possible path combinations
     FILE="${RULES_DIR}/${cc}.netset"
     [ ! -f "$FILE" ] && FILE="/root/ip2location_country_${cc}.netset"
     [ ! -f "$FILE" ] && FILE="ip2location_country_${cc}.netset"
+    [ ! -f "$FILE" ] && FILE="$PWD/ip2location_country_${cc}.netset"
     
-    load_to_tmp "$cc" "$FILE" "tmp_block_in"
-    load_to_tmp "$cc" "$FILE" "tmp_block_out"
+    if [ -f "$FILE" ]; then
+        if load_to_tmp "$cc" "$FILE" "tmp_block_in"; then LOADED_ANY=1; fi
+        if load_to_tmp "$cc" "$FILE" "tmp_block_out"; then LOADED_ANY=1; fi
+    else
+        print_warn "Netset file for $cc not found in any location"
+    fi
 done
 
 # Block Iran (IR) - OUTBOUND ONLY
 FILE_IR="${RULES_DIR}/ir.netset"
 [ ! -f "$FILE_IR" ] && FILE_IR="/root/ip2location_country_ir.netset"
 [ ! -f "$FILE_IR" ] && FILE_IR="ip2location_country_ir.netset"
-load_to_tmp "ir" "$FILE_IR" "tmp_block_out"
+[ ! -f "$FILE_IR" ] && FILE_IR="$PWD/ip2location_country_ir.netset"
+
+if [ -f "$FILE_IR" ]; then
+    if load_to_tmp "ir" "$FILE_IR" "tmp_block_out"; then LOADED_ANY=1; fi
+else
+    print_warn "Netset file for IR not found in any location"
+fi
 
 # Atomic Swap
 print_info "Finalizing Nuclear Shield (Atomic Swap)..."
-IN_SIZE=$(ipset list tmp_block_in | grep 'Number of entries' | awk '{print $4}')
-OUT_SIZE=$(ipset list tmp_block_out | grep 'Number of entries' | awk '{print $4}')
+IN_SIZE=$(ipset list tmp_block_in 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
+OUT_SIZE=$(ipset list tmp_block_out 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
 
-if [ "$IN_SIZE" -gt 0 ]; then ipset swap tmp_block_in country_block_in; fi
-if [ "$OUT_SIZE" -gt 0 ]; then ipset swap tmp_block_out country_block_out; fi
+if [ "$IN_SIZE" -gt 0 ]; then 
+    ipset swap tmp_block_in country_block_in
+    print_success "Swapped $IN_SIZE inbound IPs"
+else
+    print_warn "No inbound IPs to swap (tmp_block_in is empty)"
+fi
+
+if [ "$OUT_SIZE" -gt 0 ]; then 
+    ipset swap tmp_block_out country_block_out
+    print_success "Swapped $OUT_SIZE outbound IPs"
+else
+    print_warn "No outbound IPs to swap (tmp_block_out is empty)"
+fi
 
 ipset destroy tmp_block_in 2>/dev/null
 ipset destroy tmp_block_out 2>/dev/null
 
-IN_COUNT=$(ipset list country_block_in | grep 'Number of entries' | awk '{print $4}')
-OUT_COUNT=$(ipset list country_block_out | grep 'Number of entries' | awk '{print $4}')
-print_success "Shield Active: $IN_COUNT Inbound / $OUT_COUNT Outbound IPs blocked."
+IN_COUNT=$(ipset list country_block_in 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
+OUT_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
+
+if [ "$LOADED_ANY" -eq 0 ]; then
+    print_error "CRITICAL: No netset files were loaded! Geofencing will NOT work."
+    print_warn "Please ensure netset files are in: $RULES_DIR, /root/, or current directory"
+    print_warn "Download them with: wget https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/ip2location_country/ip2location_country_COUNTRYCODE.netset"
+else
+    print_success "Shield Active: $IN_COUNT Inbound / $OUT_COUNT Outbound IPs blocked."
+fi
 
 # 2.5 LOAD CUSTOM USER RULES
 if [ -f "user.rules" ]; then
@@ -251,6 +310,50 @@ if command -v netfilter-persistent >/dev/null; then
     netfilter-persistent save > /dev/null 2>&1
 fi
 
-print_info "Policy Rule Pri 2: $(ip rule show | grep 0x99)"
-print_success "NUCLEAR FIREWALL 5.1 ACTIVE (BIDIRECTIONAL BLACKOUT)."
+# FINAL VALIDATION
+print_step "7/7" "Validating Firewall Configuration..."
+VAL_FAIL=0
+
+# Check RAW table
+if ! iptables -t raw -L PREROUTING -n 2>/dev/null | grep -q "ACCEPT.*22,443"; then
+    print_error "Raw PREROUTING admin rule missing!"
+    VAL_FAIL=1
+fi
+
+if ! iptables -t raw -L OUTPUT -n 2>/dev/null | grep -q "ACCEPT.*22,443"; then
+    print_error "Raw OUTPUT admin rule missing!"
+    VAL_FAIL=1
+fi
+
+# Check Routing
+if ! ip route show table 200 2>/dev/null | grep -q "blackhole default"; then
+    print_error "Blackhole route (table 200) missing!"
+    VAL_FAIL=1
+fi
+
+if ! ip rule show | grep -q "fwmark 0x99 lookup 200"; then
+    print_error "Fwmark routing rule missing!"
+    VAL_FAIL=1
+fi
+
+# Check IPSets
+FINAL_IN=$(ipset list country_block_in 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
+FINAL_OUT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
+
+if [ -z "$FINAL_IN" ] || [ "$FINAL_IN" -eq 0 ]; then
+    print_warn "IPSet country_block_in is empty - inbound geofencing disabled"
+fi
+
+if [ -z "$FINAL_OUT" ] || [ "$FINAL_OUT" -eq 0 ]; then
+    print_warn "IPSet country_block_out is empty - outbound geofencing disabled"
+fi
+
+if [ "$VAL_FAIL" -eq 0 ]; then
+    print_info "Policy Rule Pri 2: $(ip rule show | grep 0x99)"
+    print_success "NUCLEAR FIREWALL 5.1 ACTIVE (BIDIRECTIONAL BLACKOUT)."
+else
+    print_error "FIREWALL VALIDATION FAILED! Some rules are missing."
+    print_warn "Check the log output above for details."
+    exit 1
+fi
 

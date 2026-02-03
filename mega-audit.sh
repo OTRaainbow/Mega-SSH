@@ -48,7 +48,7 @@ print_status() {
 
 check_file() {
     local target_file=$1; local base=$(basename "$target_file")
-    printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$base${NC}"
+    printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "$base"
     
     local found_at=""
     # Precise hierarchy search
@@ -78,12 +78,12 @@ check_file() {
 }
 
 check_pkg() {
-    local pkg=$1; printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$pkg${NC}"
+    local pkg=$1; printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "$pkg"
     if dpkg -s "$pkg" >/dev/null 2>&1 || command -v "$pkg" >/dev/null 2>&1; then print_status 0; else print_status 1; echo "Missing pkg: $pkg" >> "$LOG_FILE"; fi
 }
 
 check_service() {
-    local name=$1; local port=$2; printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$name ($port)${NC}"
+    local name=$1; local port=$2; printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "$name ($port)"
     if ss -tpln | grep -qE ":$port " || ss -tpln | grep -qE "haproxy.*:$port" || ss -tpln | grep -qE "shadow-tls.*:$port" || ss -tpln | grep -qE "stunnel.*:$port"; then print_status 0; else print_status 1; echo "Down: $name ($port)" >> "$LOG_FILE"; fi
 }
 
@@ -101,24 +101,24 @@ check_pkg "iptables-persistent"
 
 echo -e "\n  ${BCYAN}◈ 2. PERFORMANCE & SECURITY LAYERS${NC}"
 # Kernel Check
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}XanMod Elite Kernel${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "XanMod Elite Kernel"
 if uname -r | grep -qi "xanmod"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BYELLOW}[STOCK]${NC}"; fi
 
 # TFO Check
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}TCP Fast Open (TFO=3)${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "TCP Fast Open (TFO=3)"
 if [ "$(sysctl -n net.ipv4.tcp_fastopen 2>/dev/null)" == "3" ]; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
 
 # FQ-CoDel Check
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}FQ-CoDel Queue Mgmt${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "FQ-CoDel Queue Mgmt"
 IFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
 if tc qdisc show dev "$IFACE" | grep -q "fq_codel"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
 
 # Mux Version
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}HAProxy Mux (v3.3.2)${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "HAProxy Mux (v3.3.2)"
 if haproxy -v 2>/dev/null | grep -q "3.3.2"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISMATCH]${NC}"; fi
 
 # HAProxy Silence Check
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}HAProxy Silent Entry (5s)${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "HAProxy Silent Entry (5s)"
 if grep -q "inspect-delay 5s" /etc/haproxy/haproxy.cfg 2>/dev/null && grep -q "req.len gt 0" /etc/haproxy/haproxy.cfg 2>/dev/null; then
     echo -e "${BGREEN}[PASS]${NC}"
 else
@@ -130,16 +130,16 @@ check_service "SSH (EagleNet)" 2222
 check_service "UDPGW (BadVPN)" 7301
 check_service "Stunnel (SSL)" 8443
 check_service "ShadowTLS" 9443
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Nginx NJS Support${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Nginx NJS Support"
 if [ -f /etc/nginx/nginx.conf ] && grep -q "js_module" /etc/nginx/nginx.conf; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[OFF]${NC}"; fi
 
 echo -e "\n  ${BCYAN}◈ 3. NUCLEAR FIREWALL INTEGRITY${NC}"
 # Check IPv6 Status
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Zero-Leak (IPv6 Disable)${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Zero-Leak (IPv6 Disable)"
 if [ "$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)" == "1" ]; then print_status 0; else print_status 1; fi
 
 # Check DNS IPv6 Leak (The "Acid Test" part 1)
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}DNS IPv6 Leak (ISNA)${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "DNS IPv6 Leak (ISNA)"
 # Use specifically targeted nslookup to look for AAAA records
 if nslookup -type=AAAA isna.ir 2>/dev/null | grep -q "has AAAA address"; then
     echo -e "${BRED}[LEAKING]${NC}"; GLOBAL_FAIL=1
@@ -148,7 +148,7 @@ else
 fi
 
 # Check ip6tables Policy
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}ip6tables Mandatory DROP${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "ip6tables Mandatory DROP"
 if ip6tables -L -n 2>/dev/null | grep -q "Chain INPUT (policy DROP)" && \
    ip6tables -L -n 2>/dev/null | grep -q "Chain OUTPUT (policy DROP)" && \
    ip6tables -L -n 2>/dev/null | grep -q "Chain FORWARD (policy DROP)"; then
@@ -158,42 +158,42 @@ else
 fi
 
 # Check IPSets
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Nuclear IPSet (Isolation)${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Nuclear IPSet (Isolation)"
 IN_COUNT=$(ipset list country_block_in 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
 OUT_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
 if [ -n "$IN_COUNT" ] && [ "$IN_COUNT" -gt 0 ]; then echo -e "${BGREEN}[$IN_COUNT IPs]${NC}"; else echo -e "${BRED}[EMPTY]${NC}"; GLOBAL_FAIL=1; fi
 
 # Check Raw Table Isolation (Directional Precision)
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Inbound Admin (dports 22,443)${NC}"
-if iptables -t raw -S PREROUTING 2>/dev/null | grep -qiE "ACCEPT.*multiport.*22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Inbound Admin (dports 22,443)"
+if iptables -t raw -L PREROUTING -n 2>/dev/null | grep -qiE "ACCEPT.*multiport.*dports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Outbound Admin (sports 22,443)${NC}"
-if iptables -t raw -S OUTPUT 2>/dev/null | grep -qiE "ACCEPT.*multiport.*22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Outbound Admin (sports 22,443)"
+if iptables -t raw -L OUTPUT -n 2>/dev/null | grep -qiE "ACCEPT.*multiport.*sports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Outbound Block (Leak Switch)${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Outbound Block (Leak Switch)"
 if iptables -t raw -L OUTPUT -n | grep -qiE "DROP.*country_block_out"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Mangle Admin Response (CT ESTAB)${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Mangle Admin Response (CT ESTAB)"
 if iptables -t mangle -L OUTPUT -n | grep -qiE "ACCEPT.*multiport sports 22,443.*ctstate (ESTABLISHED,RELATED|RELATED,ESTABLISHED)"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
 
 # Check Policy Routing (Table 200)
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Blackhole Route (Table 200)${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Blackhole Route (Table 200)"
 if ip route show table 200 2>/dev/null | grep -q "blackhole default"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
 # Check FWMark Rule
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Fwmark 0x99 Routing Rule${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Fwmark 0x99 Routing Rule"
 if ip rule show | grep -q "fwmark 0x99 lookup 200"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
 echo -e "\n  ${BCYAN}◈ 4. LIVE GEOPRIVACY VALIDATION${NC}"
 # DPI Checks
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}DPI Shield (MSS Clamp)${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "DPI Shield (MSS Clamp)"
 if iptables -t mangle -S | grep -qiE "(TCPMSS.*set-mss 1200|set-mss 1200)"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
 
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}TTL Obfuscation (64)${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "TTL Obfuscation (64)"
 if iptables -t mangle -S | grep -qiE "(TTL.*set.*64|TTL.*64)"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
 
 # Check SSH Banner Obfuscation
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}SSH Banner (Cloaking)${NC}"
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "SSH Banner (Cloaking)"
 if strings /usr/sbin/sshd | grep -qiE "(Microsoft_IIS|IIS|Apache)"; then 
     echo -e "${BGREEN}[PASS]${NC}"
 else 
@@ -204,7 +204,7 @@ fi
 # Live High-Precision Tests (Nuclear Shield)
 test_leak() {
     local site=$1; local ip=$2; local label=$3
-    printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$label${NC}"
+    printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "$label"
     
     # Use 3s timeout as per user reporting
     # Treat ANY response (even headers only) as a leak
