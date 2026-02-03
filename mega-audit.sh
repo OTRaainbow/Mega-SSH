@@ -137,15 +137,15 @@ IN_COUNT=$(ipset list country_block_in 2>/dev/null | grep 'Number of entries' | 
 OUT_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
 if [ -n "$IN_COUNT" ] && [ "$IN_COUNT" -gt 0 ]; then echo -e "${BGREEN}[$IN_COUNT IPs]${NC}"; else echo -e "${BRED}[EMPTY]${NC}"; GLOBAL_FAIL=1; fi
 
-# Check Raw Table Isolation (Smart Isolation v3)
+# Check Raw Table Isolation (Chain Priority Fix)
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Inbound Whitelist (22,443)${NC}"
 if iptables -t raw -L PREROUTING -n | grep -q "ACCEPT.*multiport dports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Outbound Block (IR/CN/RU)${NC}"
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Outbound Block (Leak Switch)${NC}"
 if iptables -t raw -L OUTPUT -n | grep -q "DROP.*country_block_out"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Inbound Shield (RU/CN)${NC}"
-if iptables -t raw -L PREROUTING -n | grep -q "DROP.*country_block_in"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Mangle SSH Skip (22,443)${NC}"
+if iptables -t mangle -L OUTPUT -n | grep -q "ACCEPT.*multiport sports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
 
 # Check Policy Routing (Table 200)
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Blackhole Route (Table 200)${NC}"
@@ -155,16 +155,7 @@ if ip route show table 200 2>/dev/null | grep -q "blackhole default"; then echo 
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Fwmark 0x99 Routing Rule${NC}"
 if ip rule show | grep -q "fwmark 0x99 lookup 200"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
-echo -e "\n  ${BCYAN}◈ 4. ANTI-LOCKOUT INTEGRITY (SAFETY CHECK)${NC}"
-# Check RAW Exceptions
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}RAW SSH Whitelist (22,443)${NC}"
-if iptables -t raw -L PREROUTING -n | grep -q "ACCEPT.*multiport dports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
-
-# Check Mangle Exceptions
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Mangle SSH Skip (22,443)${NC}"
-if iptables -t mangle -L OUTPUT -n | grep -q "ACCEPT.*multiport sports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
-
-echo -e "\n  ${BCYAN}◈ 5. LIVE GEOPRIVACY VALIDATION${NC}"
+echo -e "\n  ${BCYAN}◈ 4. LIVE GEOPRIVACY VALIDATION${NC}"
 # DPI Checks
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}DPI Shield (MSS Clamp)${NC}"
 if iptables -t mangle -L POSTROUTING -n | grep -q "TCPMSS.*set-mss 1200"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi

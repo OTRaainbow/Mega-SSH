@@ -150,25 +150,27 @@ done
 
 ip rule add fwmark 0x99 table 200 priority 2
 
-# 4. NUCLEAR ENFORCEMENT - RAW TABLE (L3/L4 PRE-CONNTRACK)
-print_step "4/7" "Applying RAW Table Blocking (Pre-State Enforcement)..."
+# ==============================================================================
+# NUCLEAR ENFORCEMENT - RAW TABLE (L3/L4 PRE-CONNTRACK)
+# ==============================================================================
+print_step "4/7" "Applying RAW Table Blocking (Fixed Inbound/Outbound Logic)..."
 
-# 1. Clear Raw Table for a clean state
+# 1. Clear Raw Table
 iptables -t raw -F
 
-# 2. ALLOW INBOUND: This lets YOU connect to the server from Iran
-# We only match packets where the DESTINATION port is 22 or 443.
+# 2. ALLOW INBOUND (Your Access)
+# We ONLY allow traffic coming TO your server on these ports.
+# Use PREROUTING for Inbound traffic.
 iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,443 -j ACCEPT
 
-# 3. BLOCK OUTBOUND: This stops the server from talking to Iranian sites
-# This kills the connection to isna.ir even if you are logged in.
+# 3. BLOCK OUTBOUND (The Websites)
+# This prevents the server from calling out to Iran/China/Russia.
+# This rule will kill the 'curl' to isna.ir.
 iptables -t raw -A OUTPUT -m set --match-set country_block_out dst -j DROP
 
-# 4. BLOCK INBOUND: General protection from RU/CN probes
+# 4. BLOCK INBOUND (General Probes)
+# Block everything from RU/CN unless it hit the specific 'Allow' rule above.
 iptables -t raw -A PREROUTING -m set --match-set country_block_in src -j DROP
-
-# 5. FORWARDING Protection (For tunnel/proxy users)
-iptables -t raw -A PREROUTING -m set --match-set country_block_out dst -j DROP
 
 # 5. DNS HIJACK PREVENTION (Force stay within allowed zones)
 # MARK traffic to feed the Table 200 blackhole.
