@@ -62,6 +62,14 @@ ipset create tmp_block_out hash:net maxelem 1000000 -exist
 ipset flush tmp_block_in
 ipset flush tmp_block_out
 
+# 1.5 Manual Blocklist (High-Priority Leaks)
+print_info "Adding manual blocks for known CDNs (ArvanCloud)..."
+# isna.ir and related ArvanCloud ranges
+ipset add tmp_block_out 94.182.182.0/24 -exist 2>/dev/null
+ipset add tmp_block_out 185.143.232.0/22 -exist 2>/dev/null
+ipset add tmp_block_out 185.143.235.0/24 -exist 2>/dev/null
+ipset add tmp_block_out 2.188.0.0/16 -exist 2>/dev/null # Iran wide block backup
+
 load_to_tmp() {
     local cc=$1; local file=$2; local target_tmp=$3
     if [ ! -s "$file" ]; then print_warn "Warning: $file is empty or missing!"; return 1; fi
@@ -103,21 +111,29 @@ print_step "2.1" "Aggregating Geofence Data..."
 # Block RU and CN (Both Inbound and Outbound)
 RULES_DIR="/etc/megassh/rules"
 for cc in ru cn; do
+    # Try all possible path combinations
     FILE="${RULES_DIR}/${cc}.netset"
+    [ ! -f "$FILE" ] && FILE="/root/ip2location_country_${cc}.netset"
     [ ! -f "$FILE" ] && FILE="ip2location_country_${cc}.netset"
+    
     load_to_tmp "$cc" "$FILE" "tmp_block_in"
     load_to_tmp "$cc" "$FILE" "tmp_block_out"
 done
 
 # Block Iran (IR) - OUTBOUND ONLY
 FILE_IR="${RULES_DIR}/ir.netset"
+[ ! -f "$FILE_IR" ] && FILE_IR="/root/ip2location_country_ir.netset"
 [ ! -f "$FILE_IR" ] && FILE_IR="ip2location_country_ir.netset"
 load_to_tmp "ir" "$FILE_IR" "tmp_block_out"
 
 # Atomic Swap
 print_info "Finalizing Nuclear Shield (Atomic Swap)..."
-ipset swap tmp_block_in country_block_in
-ipset swap tmp_block_out country_block_out
+IN_SIZE=$(ipset list tmp_block_in | grep 'Number of entries' | awk '{print $4}')
+OUT_SIZE=$(ipset list tmp_block_out | grep 'Number of entries' | awk '{print $4}')
+
+if [ "$IN_SIZE" -gt 0 ]; then ipset swap tmp_block_in country_block_in; fi
+if [ "$OUT_SIZE" -gt 0 ]; then ipset swap tmp_block_out country_block_out; fi
+
 ipset destroy tmp_block_in 2>/dev/null
 ipset destroy tmp_block_out 2>/dev/null
 

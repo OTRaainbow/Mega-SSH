@@ -173,7 +173,7 @@ export DEBIAN_FRONTEND=noninteractive
 # Dependencies (Source Compile Prep)
 # Dependencies (Source Compile Prep)
 # Note: nginx removed from bulk install to use official mainline repo below
-(apt update && apt upgrade -y && apt install -y curl socat wget git cmake make gcc build-essential ipset iptables-persistent unzip tar cron libssl-dev libpcre2-dev zlib1g-dev liblua5.3-dev gnupg2 ca-certificates lsb-release ubuntu-keyring) >> $LOG_FILE 2>&1 &
+(apt update && apt upgrade -y && apt install -y curl socat wget git cmake make gcc build-essential ipset iptables-persistent conntrack unzip tar cron libssl-dev libpcre2-dev zlib1g-dev liblua5.3-dev gnupg2 ca-certificates lsb-release ubuntu-keyring) >> $LOG_FILE 2>&1 &
 PID=$!
 run_with_spinner $PID
 wait $PID
@@ -205,7 +205,12 @@ if ! command -v nginx > /dev/null || [[ $(nginx -v 2>&1 | grep -o "nginx/") == "
     apt install -y nginx nginx-module-njs >> $LOG_FILE 2>&1
     
     # Enable NJS Module in global config
-    if [ -f /etc/nginx/nginx.conf ] && ! grep -q "ngx_http_js_module" /etc/nginx/nginx.conf; then
+    mkdir -p /etc/nginx/modules-enabled
+    if [ -f /etc/nginx/nginx.conf ]; then
+        # Remove existing loads if any
+        sed -i '/ngx_http_js_module/d' /etc/nginx/nginx.conf
+        sed -i '/ngx_stream_js_module/d' /etc/nginx/nginx.conf
+        # Re-add at the top
         sed -i '1i load_module modules/ngx_http_js_module.so;' /etc/nginx/nginx.conf
         sed -i '2i load_module modules/ngx_stream_js_module.so;' /etc/nginx/nginx.conf
     fi
@@ -584,25 +589,31 @@ download_user_list "ir"
 download_user_list "ru"
 download_user_list "cn"
 
-# --- Hardened Geofence Integration (Nuclear Isolation) ---
 # Fetching the scripts
 fetch_script "firewall_manager.sh"
 fetch_script "mega-audit.sh"
 
-# Move to /usr/local/bin for persistent access and standardized execution
+# Move to /usr/local/bin for system-wide access
+cp MegaSSH.sh /usr/local/bin/MegaSSH.sh 2>/dev/null
 mv firewall_manager.sh /usr/local/bin/firewall_manager.sh
 mv mega-audit.sh /usr/local/bin/mega-audit.sh
-chmod +x /usr/local/bin/firewall_manager.sh /usr/local/bin/mega-audit.sh
+chmod +x /usr/local/bin/MegaSSH.sh /usr/local/bin/firewall_manager.sh /usr/local/bin/mega-audit.sh
 
-# AUTOMATIC EXECUTION: No manual intervention required anymore
-print_info "Executing Nuclear Firewall..."
-bash /usr/local/bin/firewall_manager.sh
-
-# Sync netset files to the hardened rules directory
+# 3. Sync Geofence Data (netsets) BEFORE running the firewall
+print_info "Syncing Geofence data to $RULES_DIR..."
+# Copy current directory netsets (if any)
 find . -maxdepth 1 -name "*.netset" -exec cp {} "$RULES_DIR/" \;
+# Copy /root netsets (default fetch location)
+find /root -maxdepth 1 -name "*.netset" -exec cp {} "$RULES_DIR/" \; 2>/dev/null
+
+# Normalize filenames in rules directory
 [ -f "$RULES_DIR/ip2location_country_cn.netset" ] && mv "$RULES_DIR/ip2location_country_cn.netset" "$RULES_DIR/cn.netset"
 [ -f "$RULES_DIR/ip2location_country_ru.netset" ] && mv "$RULES_DIR/ip2location_country_ru.netset" "$RULES_DIR/ru.netset"
 [ -f "$RULES_DIR/ip2location_country_ir.netset" ] && mv "$RULES_DIR/ip2location_country_ir.netset" "$RULES_DIR/ir.netset"
+
+# 4. EXECUTE NUCLEAR FIREWALL
+print_info "Executing Nuclear Firewall..."
+bash /usr/local/bin/firewall_manager.sh
 
 # Note: strict_block.sh is no longer needed separately as it is consolidated into firewall_manager.sh
 

@@ -47,8 +47,8 @@ print_status() {
 }
 
 check_file() {
-    local file=$1; printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$file${NC}"
-    if [ -f "$file" ]; then print_status 0; else print_status 1; echo "Missing: $file" >> "$LOG_FILE"; fi
+    local file=$1; printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$(basename "$file")${NC}"
+    if [ -f "$file" ] || [ -f "/root/$(basename "$file")" ]; then print_status 0; else print_status 1; echo "Missing: $file" >> "$LOG_FILE"; fi
 }
 
 check_pkg() {
@@ -139,13 +139,13 @@ if [ -n "$IN_COUNT" ] && [ "$IN_COUNT" -gt 0 ]; then echo -e "${BGREEN}[$IN_COUN
 
 # Check Raw Table Isolation (Directional Precision)
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Inbound Admin (dports 22,443)${NC}"
-if iptables -t raw -L PREROUTING -n | grep -q "ACCEPT.*multiport dports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+if iptables -t raw -L PREROUTING -n | grep -qiE "ACCEPT.*multiport dports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Outbound Admin (sports 22,443)${NC}"
-if iptables -t raw -L OUTPUT -n | grep -q "ACCEPT.*multiport sports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+if iptables -t raw -L OUTPUT -n | grep -qiE "ACCEPT.*multiport sports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Outbound Block (Leak Switch)${NC}"
-if iptables -t raw -L OUTPUT -n | grep -q "DROP.*country_block_out"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+if iptables -t raw -L OUTPUT -n | grep -qiE "DROP.*country_block_out"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Mangle Admin Response (CT ESTAB)${NC}"
 if iptables -t mangle -L OUTPUT -n | grep -qiE "ACCEPT.*multiport sports 22,443.*ctstate (ESTABLISHED,RELATED|RELATED,ESTABLISHED)"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
