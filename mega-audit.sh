@@ -137,15 +137,18 @@ IN_COUNT=$(ipset list country_block_in 2>/dev/null | grep 'Number of entries' | 
 OUT_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
 if [ -n "$IN_COUNT" ] && [ "$IN_COUNT" -gt 0 ]; then echo -e "${BGREEN}[$IN_COUNT IPs]${NC}"; else echo -e "${BRED}[EMPTY]${NC}"; GLOBAL_FAIL=1; fi
 
-# Check Raw Table Isolation (Chain Priority Fix)
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Inbound Whitelist (22,443)${NC}"
+# Check Raw Table Isolation (Directional Precision)
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Inbound Admin (dports 22,443)${NC}"
 if iptables -t raw -L PREROUTING -n | grep -q "ACCEPT.*multiport dports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Outbound Admin (sports 22,443)${NC}"
+if iptables -t raw -L OUTPUT -n | grep -q "ACCEPT.*multiport sports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Outbound Block (Leak Switch)${NC}"
 if iptables -t raw -L OUTPUT -n | grep -q "DROP.*country_block_out"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Mangle SSH Skip (22,443)${NC}"
-if iptables -t mangle -L OUTPUT -n | grep -q "ACCEPT.*multiport sports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Mangle Admin Response (CT ESTAB)${NC}"
+if iptables -t mangle -L OUTPUT -n | grep -q "ACCEPT.*multiport sports 22,443.*ctstate ESTABLISHED,RELATED"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
 
 # Check Policy Routing (Table 200)
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Blackhole Route (Table 200)${NC}"

@@ -153,32 +153,39 @@ ip rule add fwmark 0x99 table 200 priority 2
 # ==============================================================================
 # NUCLEAR ENFORCEMENT - RAW TABLE (L3/L4 PRE-CONNTRACK)
 # ==============================================================================
-print_step "4/7" "Applying RAW Table Blocking (Fixed Inbound/Outbound Logic)..."
+print_step "4/7" "Applying RAW Table Blocking (Directional Precision)..."
 
 # 1. Clear Raw Table
 iptables -t raw -F
 
-# 2. ALLOW INBOUND (Your Access)
-# We ONLY allow traffic coming TO your server on these ports.
-# Use PREROUTING for Inbound traffic.
+# 2. ALLOW INBOUND (Admin Connect)
+# Allows you to connect TO the server on ports 22/443.
 iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,443 -j ACCEPT
 
-# 3. BLOCK OUTBOUND (The Websites)
-# This prevents the server from calling out to Iran/China/Russia.
-# This rule will kill the 'curl' to isna.ir.
+# 3. ALLOW OUTBOUND RESPONSE (Admin Reply)
+# Allows the server to talk BACK to you (source port 22/443).
+iptables -t raw -A OUTPUT -p tcp -m multiport --sports 22,443 -j ACCEPT
+
+# 4. BLOCK OUTBOUND (Leak Prevention)
+# Strictly drops any other traffic trying to reach blocked countries (e.g. curl).
 iptables -t raw -A OUTPUT -m set --match-set country_block_out dst -j DROP
 
-# 4. BLOCK INBOUND (General Probes)
-# Block everything from RU/CN unless it hit the specific 'Allow' rule above.
+# 5. BLOCK INBOUND (General Security)
+# Blocks everything from RU/CN that didn't hit the specific 'Allow' rule.
 iptables -t raw -A PREROUTING -m set --match-set country_block_in src -j DROP
 
-# 5. DNS HIJACK PREVENTION (Force stay within allowed zones)
-# MARK traffic to feed the Table 200 blackhole.
-# EXCEPTION: Do NOT mark SSH/HAProxy reply traffic.
-iptables -t mangle -I OUTPUT 1 -p tcp -m multiport --sports 22,443 -j ACCEPT
+# 5. DNS HIJACK PREVENTION & BLACKHOLE ROUTING
+# Clear old mangle rules
+iptables -t mangle -F
 
-iptables -t mangle -A PREROUTING -m set --match-set country_block_out dst -j MARK --set-mark 0x99
+# A. ONLY allow response traffic for YOUR connection (prevents lockout)
+# This prevents Replies from being marked for the blackhole.
+iptables -t mangle -A OUTPUT -p tcp -m multiport --sports 22,443 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+# B. MARK all other outbound traffic to blocked countries
+# This forces the packet into the 'Table 200' Blackhole.
 iptables -t mangle -A OUTPUT -m set --match-set country_block_out dst -j MARK --set-mark 0x99
+iptables -t mangle -A PREROUTING -m set --match-set country_block_out dst -j MARK --set-mark 0x99
 
 # 6. BASE CONNECTIVITY & SECURITY
 iptables -A INPUT -i lo -j ACCEPT
