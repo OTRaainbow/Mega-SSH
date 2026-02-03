@@ -370,13 +370,26 @@ print_step "7/7" "Validating Firewall Configuration..."
 VAL_FAIL=0
 
 # Check RAW table using ultra-resilient patterns
-if ! iptables -t raw -S PREROUTING 2>/dev/null | grep -qi "notrack" | grep -qE "22,443"; then
-    print_error "Raw Inbound Admin (NOTRACK 22,443) missing or mismatched!"
-    VAL_FAIL=1
-fi
+check_raw_ultra_resilient() {
+    local ports=$1; local label=$2
+    printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$label${NC}"
+    local raw_rules=$(iptables-save -t raw 2>/dev/null)
+    if echo "$raw_rules" | grep -qi "NOTRACK" && echo "$raw_rules" | grep -qE "(dport|sport).*($(echo $ports | tr ',' '|'))"; then 
+        echo -e "${BGREEN}[PASS]${NC}"
+    else 
+        echo -e "${BRED}[FAIL]${NC}"
+        VAL_FAIL=1
+    fi
+}
 
-if ! iptables -t raw -S OUTPUT 2>/dev/null | grep -qi "notrack" | grep -qE "22,443"; then
-    print_error "Raw Outbound Admin (NOTRACK 22,443) missing or mismatched!"
+check_raw_ultra_resilient "22,443" "Raw Inbound Admin (NOTRACK 22,443)"
+check_raw_ultra_resilient "22,443" "Raw Outbound Admin (NOTRACK 22,443)"
+
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}RAW Outbound Block (Leak Switch)${NC}"
+if iptables-save -t raw 2>/dev/null | grep -qiE "DROP.*country_block_out"; then 
+    echo -e "${BGREEN}[PASS]${NC}"
+else 
+    echo -e "${BRED}[FAIL]${NC}"
     VAL_FAIL=1
 fi
 

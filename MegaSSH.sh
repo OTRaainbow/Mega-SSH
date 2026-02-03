@@ -865,20 +865,31 @@ run_integrated_audit() {
     if [ "$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6)" == "1" ]; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[LEAKING]${NC}"; fi
     
     # 2. RAW Table Directional Integrity
-    check_raw_resilient() {
+    check_raw_ultra_resilient() {
         local ports=$1; local label=$2
         printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}$label${NC}"
-        if iptables -t raw -S 2>/dev/null | grep -qi "NOTRACK" | grep -qE "$ports"; then 
+        # Use iptables-save for the most standard parsing format
+        local raw_rules=$(iptables-save -t raw 2>/dev/null)
+        if echo "$raw_rules" | grep -qi "NOTRACK" && echo "$raw_rules" | grep -qE "(dport|sport).*($(echo $ports | tr ',' '|'))"; then 
             echo -e "${BGREEN}[PASS]${NC}"
         else 
             echo -e "${BRED}[FAIL]${NC}"
         fi
     }
-    check_raw_resilient "22,443" "Raw Inbound Admin (NOTRACK 22,443)"
-    check_raw_resilient "22,443" "Raw Outbound Admin (NOTRACK 22,443)"
+    check_raw_ultra_resilient "22,443" "Raw Inbound Admin (NOTRACK 22,443)"
+    check_raw_ultra_resilient "22,443" "Raw Outbound Admin (NOTRACK 22,443)"
     
     printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}RAW Outbound Block (Leak Switch)${NC}"
-    if iptables -t raw -S 2>/dev/null | grep -qiE "DROP.*country_block_out"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
+    if iptables-save -t raw 2>/dev/null | grep -qiE "DROP.*country_block_out"; then 
+        echo -e "${BGREEN}[PASS]${NC}"
+    else 
+        # Fallback check for standard iptables
+        if iptables -t raw -S 2>/dev/null | grep -qiE "DROP.*country_block_out"; then
+            echo -e "${BGREEN}[PASS]${NC}"
+        else
+            echo -e "${BRED}[FAIL]${NC}"
+        fi
+    fi
     
     # 3. Mangle State Tracking
     printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Mangle Admin Safety (Whitelist)${NC}"
