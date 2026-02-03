@@ -44,10 +44,17 @@ else
 fi
 
 # 3. Fix Source File Warning (Download to /root)
-echo -e "${BYELLOW}[STEP 3] Re-downloading MegaSSH.sh to /root/...${NC}"
+echo -e "${BYELLOW}[STEP 3] Re-downloading Core Scripts to /root/...${NC}"
 wget -q -O /root/MegaSSH.sh https://raw.githubusercontent.com/OTRaainbow/Mega-SSH/main/MegaSSH.sh
-chmod +x /root/MegaSSH.sh
-echo -e "${BGREEN}MegaSSH.sh downloaded and permissioned at /root/MegaSSH.sh${NC}"
+wget -q -O /root/mega-audit.sh https://raw.githubusercontent.com/OTRaainbow/Mega-SSH/main/mega-audit.sh
+chmod +x /root/MegaSSH.sh /root/mega-audit.sh
+echo -e "${BGREEN}Scripts downloaded and permissioned at /root/${NC}"
+
+# Re-sync to /usr/local/bin for global access
+cp /root/MegaSSH.sh /usr/local/bin/MegaSSH.sh
+cp /root/mega-audit.sh /usr/local/bin/mega-audit.sh
+chmod +x /usr/local/bin/MegaSSH.sh /usr/local/bin/mega-audit.sh
+echo -e "${BGREEN}Scripts synchronized to /usr/local/bin/${NC}"
 
 # 4. Force Success Flag
 echo -e "${BYELLOW}[STEP 4] Writing Success Flag to Log...${NC}"
@@ -63,10 +70,12 @@ echo -e "${BCYAN}Rescue Complete. Now running audit to verify... ${NC}"
 echo -e "${BCYAN}------------------------------------------------${NC}"
 
 # 5. Run Audit
-if [ -x "./mega-audit.sh" ]; then
-    ./mega-audit.sh
-elif [ -x "/usr/local/bin/mega-audit.sh" ]; then
-    /usr/local/bin/mega-audit.sh
+RESCUE_AUDIT="/usr/local/bin/mega-audit.sh"
+if [ ! -x "$RESCUE_AUDIT" ]; then RESCUE_AUDIT="./mega-audit.sh"; fi
+if [ ! -x "$RESCUE_AUDIT" ]; then RESCUE_AUDIT="/root/mega-audit.sh"; fi
+
+if [ -x "$RESCUE_AUDIT" ]; then
+    bash "$RESCUE_AUDIT"
 else
     echo -e "${BRED}mega-audit.sh not found. Please run it manually.${NC}"
 fi

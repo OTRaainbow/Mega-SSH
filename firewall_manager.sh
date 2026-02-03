@@ -370,13 +370,13 @@ print_step "7/7" "Validating Firewall Configuration..."
 VAL_FAIL=0
 
 # Check RAW table using ultra-resilient patterns
-if ! iptables -t raw -S PREROUTING 2>/dev/null | grep -qi "notrack"; then
-    print_error "Raw PREROUTING NOTRACK rule missing or mismatched!"
+if ! iptables -t raw -S PREROUTING 2>/dev/null | grep -qi "notrack" | grep -qE "22,443"; then
+    print_error "Raw Inbound Admin (NOTRACK 22,443) missing or mismatched!"
     VAL_FAIL=1
 fi
 
-if ! iptables -t raw -S OUTPUT 2>/dev/null | grep -qi "notrack"; then
-    print_error "Raw OUTPUT NOTRACK rule missing or mismatched!"
+if ! iptables -t raw -S OUTPUT 2>/dev/null | grep -qi "notrack" | grep -qE "22,443"; then
+    print_error "Raw Outbound Admin (NOTRACK 22,443) missing or mismatched!"
     VAL_FAIL=1
 fi
 

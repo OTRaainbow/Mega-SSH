@@ -191,17 +191,17 @@ OUT_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' 
 if [ -n "$IN_COUNT" ] && [ "$IN_COUNT" -gt 0 ]; then echo -e "${BGREEN}[$IN_COUNT IPs]${NC}"; else echo -e "${BRED}[EMPTY]${NC}"; GLOBAL_FAIL=1; fi
 
 # Check Raw Table Isolation (Directional Precision)
-printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Inbound (NOTRACK 22,443)"
-if iptables -t raw -S PREROUTING 2>/dev/null | grep -qi "notrack"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Inbound Admin (NOTRACK 22,443)"
+if iptables -t raw -S PREROUTING 2>/dev/null | grep -qi "notrack" | grep -qE "22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
 printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Inbound (ACCEPT 22,443)"
-if iptables -t raw -S PREROUTING 2>/dev/null | grep -q "ACCEPT"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+if iptables -t raw -S PREROUTING 2>/dev/null | grep -q "ACCEPT" | grep -qE "22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
-printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Outbound (NOTRACK 22,443)"
-if iptables -t raw -S OUTPUT 2>/dev/null | grep -qi "notrack"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Outbound Admin (NOTRACK 22,443)"
+if iptables -t raw -S OUTPUT 2>/dev/null | grep -qi "notrack" | grep -qE "22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
 printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Outbound (ACCEPT 22,443)"
-if iptables -t raw -S OUTPUT 2>/dev/null | grep -q "ACCEPT"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+if iptables -t raw -S OUTPUT 2>/dev/null | grep -q "ACCEPT" | grep -qE "22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
 printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Outbound Block (Leak Switch)"
 if iptables -t raw -S OUTPUT 2>/dev/null | grep -qiE "DROP.*country_block_out"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
