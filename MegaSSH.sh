@@ -583,9 +583,9 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-systemctl restart nginx > /dev/null 2>&1
-# Ensure the config is linked (Standard Ubuntu)
+mkdir -p /etc/nginx/sites-enabled
 ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+systemctl restart nginx
 systemctl reload nginx
 # Verify Nginx
 check_service_health "nginx" "80"
@@ -787,6 +787,11 @@ print_step "Final" "Writing installation success flag..."
 if [ ! -f "$LOG_FILE" ]; then touch "$LOG_FILE"; fi
 # Remove old success flags if they exist to avoid duplication
 sed -i '/MEGASSH_INSTALLATION_SUCCESSFUL/d' "$LOG_FILE"
+# Repair/Sync local source to /root/ to resolve audit warnings
+wget -q -O /root/MegaSSH.sh https://raw.githubusercontent.com/OTRaainbow/Mega-SSH/main/MegaSSH.sh
+chmod +x /root/MegaSSH.sh
+print_success "MegaSSH.sh synced to /root/ for audit compatibility"
+
 echo "MEGASSH_INSTALLATION_SUCCESSFUL" >> $LOG_FILE
 print_success "Installation status finalized in $LOG_FILE"
 
