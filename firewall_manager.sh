@@ -181,10 +181,10 @@ iptables -t raw -F 2>/dev/null
 iptables -t raw -X 2>/dev/null
 
 # 2. ALLOW INBOUND (Admin Connect)
-iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,2222,443 -j ACCEPT
+iptables -t raw -A PREROUTING -p tcp -m multiport --dports 22,443 -j ACCEPT
 
 # 3. ALLOW OUTBOUND RESPONSE (Admin Reply)
-iptables -t raw -A OUTPUT -p tcp -m multiport --sports 22,2222,443 -j ACCEPT
+iptables -t raw -A OUTPUT -p tcp -m multiport --sports 22,443 -j ACCEPT
 
 # 4. BLOCK OUTBOUND (Leak Prevention)
 # Check if ipset exists and has entries before applying to avoid match error

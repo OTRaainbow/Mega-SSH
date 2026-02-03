@@ -152,10 +152,10 @@ if [ -n "$IN_COUNT" ] && [ "$IN_COUNT" -gt 0 ]; then echo -e "${BGREEN}[$IN_COUN
 
 # Check Raw Table Isolation (Directional Precision)
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Inbound Admin (dports 22,443)${NC}"
-if iptables -t raw -S PREROUTING 2>/dev/null | grep -qiE "ACCEPT.*(dports|dport).*(22|443)"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+if iptables -t raw -S PREROUTING 2>/dev/null | grep -qiE "ACCEPT.*multiport.*22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Outbound Admin (sports 22,443)${NC}"
-if iptables -t raw -S OUTPUT 2>/dev/null | grep -qiE "ACCEPT.*(sports|sport).*(22|443)"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+if iptables -t raw -S OUTPUT 2>/dev/null | grep -qiE "ACCEPT.*multiport.*22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Outbound Block (Leak Switch)${NC}"
 if iptables -t raw -L OUTPUT -n | grep -qiE "DROP.*country_block_out"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
