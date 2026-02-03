@@ -73,13 +73,7 @@ load_set_nuclear() {
     ) | ipset restore -exist 2>/dev/null
     
     # Swap and clean up
-    ipset swap "$tmp_set" "$target_set" 2>/dev/null || {
-        # Fallback if swap fails (e.g. set types differ, though here they don't)
-        while read -r ip; do
-            [[ "$ip" =~ ^#.* ]] || [[ -z "$ip" ]] && continue
-            ipset add "$target_set" "$ip" -exist 2>/dev/null
-        done < "$file"
-    }
+    ipset swap "$tmp_set" "$target_set" 2>/dev/null
     ipset destroy "$tmp_set" 2>/dev/null
     
     local count=$(ipset list "$target_set" | grep 'Number of entries' | awk '{print $4}')
@@ -95,16 +89,20 @@ iptables -t nat -F
 iptables -t mangle -F
 iptables -t raw -F
 
-# 1. Block RU and CN (Both Inbound and Outbound) - "All traffic"
+# 1. Block RU and CN (Both Inbound and Outbound) - "Nuclear Isolation"
 for cc in ru cn; do
     FILE="ip2location_country_${cc}.netset"
+    # Redundancy check in multiple possible locations
+    [ ! -f "$FILE" ] && FILE="/etc/megassh/rules/${cc}.netset"
+    
     load_set_nuclear "$cc" "$FILE" "country_block_in"
     load_set_nuclear "$cc" "$FILE" "country_block_out"
 done
 
 # 2. Block Iran (IR) - OUTBOUND ONLY
-# This blocks your server from accessing Iranian sites, but lets YOU connect to the server.
-load_set_nuclear "ir" "ip2location_country_ir.netset" "country_block_out"
+FILE_IR="ip2location_country_ir.netset"
+[ ! -f "$FILE_IR" ] && FILE_IR="/etc/megassh/rules/ir.netset"
+load_set_nuclear "ir" "$FILE_IR" "country_block_out"
 
 # 2.5 LOAD CUSTOM USER RULES (ufw-user-*)
 if [ -f "user.rules" ]; then
@@ -138,53 +136,50 @@ ip rule add fwmark 0x99 table 200 priority 2
 
 # 4. MULTILAYER ENFORCEMENT
 # Optimization: Mark only in PREROUTING (inbound) and OUTPUT (outbound generated on box)
-# This covers all traffic with minimal overhead.
 
-# IMMEDIATE DROP FOR OUTBOUND BLOCKED COUNTRIES (RU/CN)
+# 1. Total block for CN/RU at the entrance (Inbound/Outbound BIDIRECTIONAL)
+iptables -t raw -I PREROUTING 1 -m set --match-set country_block_in src -j DROP
+iptables -t raw -I PREROUTING 1 -m set --match-set country_block_in dst -j DROP
+
+# 2. Total Outbound Blackhole for CN/RU/IR (Highest Priority)
 iptables -I OUTPUT 1 -m set --match-set country_block_out dst -j DROP
 iptables -I FORWARD 1 -m set --match-set country_block_out dst -j DROP
 
+# 3. Routing Table 200 Blackhole (The 0x99 Mark)
+# Ensures packets hit routing dead-end even if filter is bypassed
 iptables -t mangle -I PREROUTING 1 -m set --match-set country_block_out dst -j MARK --set-mark 0x99
 iptables -t mangle -I OUTPUT 1 -m set --match-set country_block_out dst -j MARK --set-mark 0x99
 
-# Drop incoming RU/CN at the earliest possible stage
-iptables -t raw -I PREROUTING 1 -m set --match-set country_block_in src -j DROP
-
-# Immediate Reject for local/forwarded traffic (Admin Prohibited)
-iptables -I FORWARD 1 -m set --match-set country_block_out dst -j REJECT --reject-with icmp-admin-prohibited
-iptables -I OUTPUT 1 -m set --match-set country_block_out dst -j REJECT --reject-with icmp-admin-prohibited
-
-# 5. DNS HIJACK PREVENTION (stateless)
+# 5. DNS HIJACK PREVENTION (Force stay within allowed zones)
 iptables -t mangle -I OUTPUT 1 -p udp --dport 53 -m set --match-set country_block_out dst -j MARK --set-mark 0x99
 iptables -t mangle -I FORWARD 1 -p udp --dport 53 -m set --match-set country_block_out dst -j MARK --set-mark 0x99
 
-# 6. BASE CONNECTIVITY
+# 6. BASE CONNECTIVITY & SECURITY
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 
 # Stealth Reset for INVALID packets (DPI Evasion)
-# Fix: --reject-with tcp-reset is ONLY valid for TCP.
 iptables -A INPUT -p tcp -m conntrack --ctstate INVALID -j REJECT --reject-with tcp-reset
 iptables -A INPUT -p udp -m conntrack --ctstate INVALID -j DROP
 iptables -A INPUT -m conntrack --ctstate INVALID -j DROP
 
-# MSS Clamping (DPI Evasion)
-iptables -t mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1300
-iptables -t mangle -A OUTPUT -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1300
+# MSS Clamping & TTL Obfuscation (DPI Evasion)
+iptables -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1200
+iptables -t mangle -A POSTROUTING -j TTL --ttl-set 64
 
 # Open ONLY Ports 22 and 443
 iptables -A INPUT -p tcp --dport 22 -j ACCEPT
 iptables -A INPUT -p tcp --dport 443 -j ACCEPT
 
-# 6.5 Pingtunnel (ICMP Wrapper)
-# Allow Incoming ICMP Echo Request (Type 8) and Outgoing Reply (Type 0)
+# ICMP Wrapper (Pinging allowed but restricted)
 iptables -A INPUT -p icmp --icmp-type echo-request -j ACCEPT
 iptables -A OUTPUT -p icmp --icmp-type echo-reply -j ACCEPT
 
 iptables -P INPUT DROP
 
-# conntrack rate limiting for port 443 (EagleNet logic)
-iptables -I INPUT -p tcp --dport 443 -j ACCEPT
+# 6.5 Flush Route Cache (CRITICAL)
+print_step "6.5" "Flushing Route Cache..."
+ip route flush cache
 
 # 7. Persistence
 mkdir -p /etc/iptables
@@ -194,4 +189,5 @@ if command -v netfilter-persistent >/dev/null; then
 fi
 
 print_info "Policy Rule Pri 2: $(ip rule show | grep 0x99)"
-print_success "NUCLEAR FIREWALL 5.0 ACTIVE."
+print_success "NUCLEAR FIREWALL 5.1 ACTIVE (BIDIRECTIONAL BLACKOUT)."
+

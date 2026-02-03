@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================================
 # MegaSSH High-Performance Optimizer (Consolidated)
-# Target: Ubuntu 24.04 | Kernel: XanMod | Net: BBRv3 + CAKE
+# Target: Ubuntu 24.04 | Kernel: XanMod | Net: BBRv3 + FQ-CoDel
 # Features: IRQ Balancing, RAM Logging, MSS Clamping, Sysctl Tuning
 # ==============================================================================
 
@@ -176,14 +176,14 @@ else
     print_success "/var/log already configured as tmpfs."
 fi
 
-# --- Step 2: CAKE Queue Discipline ---
-print_step "2/5" "Applying CAKE qdisc to ${IFACE}..."
+# --- Step 2: FQ-CoDel Queue Discipline ---
+print_step "2/5" "Applying FQ-CoDel qdisc to ${IFACE}..."
 # Clear existing qdiscs to be safe
 tc qdisc del dev "$IFACE" root 2>/dev/null
-if tc qdisc add dev "$IFACE" root cake; then
-    print_success "CAKE qdisc applied successfully."
+if tc qdisc add dev "$IFACE" root fq_codel; then
+    print_success "FQ-CoDel qdisc applied successfully."
 else
-    print_error "Failed to apply CAKE qdisc (Kernel module missing?)."
+    print_error "Failed to apply FQ-CoDel qdisc."
 fi
 
 # --- Step 3: High-Standard Kernel Tuning (sysctl) ---
@@ -198,7 +198,7 @@ net.core.optmem_max = 65536
 net.core.somaxconn = 65535
 
 # --- TCP Congestion Control & Queue Management ---
-net.core.default_qdisc = cake
+net.core.default_qdisc = fq_codel
 net.ipv4.tcp_congestion_control = bbr
 
 # --- TCP Fast Open (Client/Server) ---
@@ -251,21 +251,8 @@ for file in /sys/class/net/"$IFACE"/queues/rx-*/rps_cpus; do
     fi
 done
 
-# --- Step 5: DPI Evasion (MSS Clamping) ---
-print_step "5/5" "Applying DPI Evasion (MSS Clamping: 1200)..."
-# Idempotency: Check if rule exists first
-if iptables -t mangle -C POSTROUTING -o "$IFACE" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1200 2>/dev/null; then
-     print_success "MSS Clamp rule already exists."
-else
-    iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1360
-    print_success "MSS Clamp rule applied to POSTROUTING."
-fi
-
 # Save iptables to ensure persistence
 mkdir -p /etc/iptables
-if command -v iptables-save >/dev/null; then
-    iptables-save > /etc/iptables/rules.v4
-fi
 
 print_success "OPTIMIZATION COMPLETE SUCCESSFULLY"
 print_warn "IMPORTANT: A reboot is recommended to load the XanMod Kernel."

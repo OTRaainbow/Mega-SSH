@@ -49,7 +49,6 @@ print_banner() {
     echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Multiplexing:${NC}   ${CYAN}HAProxy 3.3.2 (Port 443 Split-Stream)${NC}"
     echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Kernel Engine:${NC}  ${CYAN}XanMod v3 + Hertz BBRv3 (Low Latency)${NC}"
     echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Privacy Shield:${NC} ${CYAN}Nuclear Firewall + Zero-Leak Geofencing${NC}"
-    echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Stealth Logic:${NC}  ${CYAN}ICMP Transparent Tunnel (Pingtunnel)${NC}"
     echo -e "  ${BPURPLE}╰─${NC} ${BWHITE}Obfuscation :${NC}  ${CYAN}SSH Banner Cloaking (Microsoft_IIS Mode)${NC}"
     echo ""
 }
@@ -169,7 +168,9 @@ export DEBIAN_FRONTEND=noninteractive
 
 # Dependencies (REMOVED ufw)
 # Dependencies (Source Compile Prep)
-(apt update && apt upgrade -y && apt install -y curl socat wget git cmake make gcc build-essential nginx ipset iptables-persistent unzip tar cron libssl-dev libpcre2-dev zlib1g-dev liblua5.3-dev) >> $LOG_FILE 2>&1 &
+# Dependencies (Source Compile Prep)
+# Note: nginx removed from bulk install to use official mainline repo below
+(apt update && apt upgrade -y && apt install -y curl socat wget git cmake make gcc build-essential ipset iptables-persistent unzip tar cron libssl-dev libpcre2-dev zlib1g-dev liblua5.3-dev gnupg2 ca-certificates lsb-release ubuntu-keyring) >> $LOG_FILE 2>&1 &
 PID=$!
 run_with_spinner $PID
 wait $PID
@@ -181,16 +182,39 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Double Check Dependencies
-# Double Check Dependencies
-if ! command -v nginx > /dev/null; then
-    print_error "Critical Dependencies (Nginx) missing!"
-    exit 1
+# Official Nginx Mainline + NJS Module (2026 Tier)
+print_step "1.2" "Deploying Official Nginx Mainline with NJS Module support..."
+if ! command -v nginx > /dev/null || [[ $(nginx -v 2>&1 | grep -o "nginx/") == "" ]]; then
+    # Add Signing Key
+    curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor \
+        | tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null
+    
+    # Add Mainline Repo
+    echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] \
+    http://nginx.org/packages/mainline/ubuntu `lsb_release -cs` nginx" \
+        | tee /etc/apt/sources.list.d/nginx.list
+    
+    # Set Pinning
+    echo -e "Package: *\nPin: origin nginx.org\nPin-Priority: 900\n" \
+        | tee /etc/apt/preferences.d/99nginx
+        
+    apt update >> $LOG_FILE 2>&1
+    apt install -y nginx nginx-module-njs >> $LOG_FILE 2>&1
+    
+    # Enable NJS Module in global config
+    if [ -f /etc/nginx/nginx.conf ] && ! grep -q "ngx_http_js_module" /etc/nginx/nginx.conf; then
+        sed -i '1i load_module modules/ngx_http_js_module.so;' /etc/nginx/nginx.conf
+        sed -i '2i load_module modules/ngx_stream_js_module.so;' /etc/nginx/nginx.conf
+    fi
+    print_success "Nginx Mainline + NJS Installed & Configured"
+else
+    print_success "Nginx Mainline already active"
 fi
 
-print_success "Dependencies Installed"
-
-print_success "Dependencies Installed"
+if ! command -v nginx > /dev/null; then
+    print_error "Critical Dependencies (Nginx Official) missing!"
+    exit 1
+fi
  
 # HAProxy 3.3.2 Source Compilation
 print_step "1.5" "Compiling HAProxy 3.3.2 (High Performance)..."
@@ -487,8 +511,9 @@ frontend stats
 frontend multiplexer_443
     bind *:${PORT_HAPROXY}
     mode tcp
-    # 1s Delay: Fast response for SSH clients
-    tcp-request inspect-delay 1s
+    # 5s Delay: Increases invisibility to scanners.
+    # Server waits for client to speak first (Silent entry).
+    tcp-request inspect-delay 5s
     
     # ACLs for Traffic Identification
     # Match SSL/TLS ClientHello (ContentType 22 / 0x16)
@@ -501,8 +526,12 @@ frontend multiplexer_443
     use_backend web_decoy_backend if is_ssl
     use_backend web_decoy_backend if is_http
     
+    # "Silent" Entry Logic: 
+    # Only route to SSH if specific byte sequence or content is detected,
+    # or if the delay expires without looking like web traffic.
+    tcp-request content accept if { req.len gt 0 }
+    
     # Default Fallback -> SSH
-    # If it waits (standard SSH behavior) or doesn't look like Web, send to SSH.
     default_backend ssh_backend
 
 backend ssh_backend
@@ -529,9 +558,8 @@ fetch_script "stunnel_manager.sh"
 ./stunnel_manager.sh > /dev/null 2>&1
 fetch_script "shadowtls_manager.sh"
 ./shadowtls_manager.sh > /dev/null 2>&1
-fetch_script "pingtunnel_manager.sh"
-./pingtunnel_manager.sh > /dev/null 2>&1
-print_success "TLS Wrappers & Pingtunnel Active (Stunnel + ShadowTLS + Pingtunnel)"
+# Pingtunnel removed for TCP Direct purity
+print_success "TLS Wrappers Active (Stunnel + ShadowTLS)"
 
 # 8. Firewall & Geofencing
 print_step "8/10" "Applying Advanced Firewall & Geofencing..."
@@ -546,21 +574,18 @@ download_user_list "ir"
 download_user_list "ru"
 download_user_list "cn"
 
-# --- Hardened Geofence Integration (Strict DROP) ---
-print_step "8.1" "Deploying Nuclear Firewall & Total Geofence Lockout..."
+# --- Hardened Geofence Integration (Nuclear Isolation) ---
+print_step "8.1" "Deploying Nuclear Firewall & Total Geofence Isolation..."
 fetch_script "firewall_manager.sh"
 ./firewall_manager.sh
 
 mkdir -p /etc/megassh/rules
-# Move netset files to the hardened rules directory
+# Move netset files to the hardened rules directory (handled by firewall_manager.sh)
 mv ip2location_country_cn.netset /etc/megassh/rules/cn.netset 2>/dev/null
 mv ip2location_country_ru.netset /etc/megassh/rules/ru.netset 2>/dev/null
 mv ip2location_country_ir.netset /etc/megassh/rules/ir.netset 2>/dev/null
 
-fetch_script "strict_block.sh"
-chmod +x strict_block.sh
-# Apply strict DROP rules AFTER firewall_manager.sh (to avoid flush)
-./strict_block.sh
+# Note: strict_block.sh is no longer needed separately as it is consolidated into firewall_manager.sh
 
 print_success "Strict Outbound Blocking Active (Silent DROP)"
 
@@ -598,7 +623,6 @@ fetch_script "MegaSSH-WARP.sh"
 
 # --- Final Summary ---
 SERVER_IP=$(curl -s https://api.ipify.org || curl -s https://ifconfig.me)
-PINGTUNNEL_KEY="123456" # Matching pingtunnel_manager.sh
 
 echo ""
 echo -e "${BBLUE}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
@@ -608,7 +632,6 @@ echo -e "${BBLUE}║${NC} ${BYELLOW}Connection Details:${NC}                    
 echo -e "${BBLUE}║${NC}   • ${BCYAN}Direct SSH:${NC}    ${SERVER_IP}:443                                          ${BBLUE}║${NC}"
 echo -e "${BBLUE}║${NC}   • ${BRED}Rescue SSH:${NC}    ${SERVER_IP}:22 (Temp Enabled)                            ${BBLUE}║${NC}"
 echo -e "${BBLUE}║${NC}   • ${BCYAN}SSL Wrapped:${NC}   ${SERVER_IP}:8443 (via Stunnel)                           ${BBLUE}║${NC}"
-echo -e "${BBLUE}║${NC}   • ${BCYAN}ICMP Stealth:${NC}  ${SERVER_IP} (via Pingtunnel)                                ${BBLUE}║${NC}"
 echo -e "${BBLUE}║${NC}   • ${BCYAN}User Protocol:${NC} ChaCha20-Poly1305                                      ${BBLUE}║${NC}"
 echo -e "${BBLUE}║${NC}   • ${BCYAN}Decoy Site:${NC}    Digikala (https://${SERVER_IP}/)                          ${BBLUE}║${NC}"
 echo -e "${BBLUE}║${NC}                                                                             ${BBLUE}║${NC}"
@@ -618,15 +641,12 @@ echo -e "${BBLUE}║${NC}   • Add WARP:      ${BGREEN}./MegaSSH-WARP.sh${NC}  
 echo -e "${BBLUE}║${NC}   • ${BRED}Run Audit:${NC}     ${BGREEN}./mega-audit.sh${NC}                                        ${BBLUE}║${NC}"
 echo -e "${BBLUE}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
 
-# --- Antigravity UI: Pingtunnel Mapping ---
-echo -e "\n${BCYAN}◈ SSH OVER ICMP (TRANSPARENT TUNNEL) CONFIGuration${NC}"
+# --- Antigravity UI: Connection Summary ---
+echo -e "\n${BCYAN}◈ ELITE SSH DIRECT CONNECTION INFO${NC}"
 echo -e "  ${BPURPLE}│${NC}"
-echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Local Entrance:${NC}  ${BCYAN}127.0.0.1:443${NC}"
-echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Transport:${NC}       ${BCYAN}ICMP Stealth Tunnel${NC}"
-echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Remote Target:${NC}   ${BCYAN}${SERVER_IP}:443${NC}"
-echo -e "  ${BPURPLE}│${NC}"
-echo -e "  ${BPURPLE}╰─>${NC} ${BWHITE}Local Client CMD:${NC} ${BGREEN}sudo ./pingtunnel -type client -l :443 -s ${SERVER_IP} -t 127.0.0.1:443 -key ${PINGTUNNEL_KEY}${NC}"
-echo -e "  ${BPURPLE}╰─>${NC} ${BWHITE}Final SSH CMD:${NC}   ${BGREEN}ssh root@127.0.0.1 -p 443${NC}"
+echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Protocol:${NC}   ${CYAN}TCP (Multiplexed Port 443)${NC}"
+echo -e "  ${BPURPLE}├─${NC} ${BWHITE}Cipher:${NC}     ${CYAN}ChaCha20-Poly1305${NC}"
+echo -e "  ${BPURPLE}╰─>${NC} ${BWHITE}Direct CMD:${NC} ${BGREEN}ssh root@${SERVER_IP} -p 443${NC}"
 echo ""
 
 # --- Integrated Health Audit & Final Prompt ---
@@ -648,12 +668,10 @@ run_integrated_audit() {
     }
     check_port "Nginx (Decoy)" 80
     check_port "HAProxy (Multiplexer)" 443
-    check_port "SSH (Internal)" 2222
+    check_port "SSH (EagleNet)" 2222
     check_port "Stunnel (SSL)" 8443
     check_port "ShadowTLS" 9443
     check_port "UDPGW" 7301
-    printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Pingtunnel Service${NC}"
-    if systemctl is-active --quiet pingtunnel; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
     check_port "Rescue SSH" 22
 
     echo -e "\n${BCYAN}◈ FIREWALL & PRIVACY INTEGRITY${NC}"

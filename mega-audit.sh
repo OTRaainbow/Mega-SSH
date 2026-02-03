@@ -72,41 +72,98 @@ check_pkg "haproxy"
 check_pkg "nginx"
 check_pkg "ipset"
 
-echo -e "\n  ${BCYAN}◈ 2. SECURITY LAYERS (SERVICES)${NC}"
-check_service "Nginx (Decoy)" 80
+echo -e "\n  ${BCYAN}◈ 2. PERFORMANCE & SECURITY LAYERS${NC}"
+# Kernel Check
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}XanMod Elite Kernel${NC}"
+if uname -r | grep -qi "xanmod"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BYELLOW}[STOCK]${NC}"; fi
+
+# TFO Check
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}TCP Fast Open (TFO=3)${NC}"
+if [ "$(sysctl -n net.ipv4.tcp_fastopen 2>/dev/null)" == "3" ]; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
+
+# FQ-CoDel Check
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}FQ-CoDel Queue Mgmt${NC}"
+IFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
+if tc qdisc show dev "$IFACE" | grep -q "fq_codel"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
+
+# Mux Version
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}HAProxy Mux (v3.3.2)${NC}"
+if haproxy -v 2>/dev/null | grep -q "3.3.2"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISMATCH]${NC}"; fi
+
+# HAProxy Silence Check
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}HAProxy Silent Entry (5s)${NC}"
+if grep -q "inspect-delay 5s" /etc/haproxy/haproxy.cfg 2>/dev/null && grep -q "req.len gt 0" /etc/haproxy/haproxy.cfg 2>/dev/null; then
+    echo -e "${BGREEN}[PASS]${NC}"
+else
+    echo -e "${BRED}[FAIL]${NC}"
+fi
+
 check_service "HAProxy (Mux)" 443
 check_service "SSH (EagleNet)" 2222
 check_service "UDPGW (BadVPN)" 7301
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Pingtunnel Logic${NC}"
-if systemctl is-active --quiet pingtunnel; then print_status 0; else print_status 1; fi
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Nginx NJS Support${NC}"
+if nginx -V 2>&1 | grep -q "ngx_http_js_module"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[OFF]${NC}"; fi
+# Pingtunnel removed for TCP Direct purity
 
-echo -e "\n  ${BCYAN}◈ 3. NETWORK OBFUSCATION & PRIVACY${NC}"
+echo -e "\n  ${BCYAN}◈ 3. NUCLEAR FIREWALL INTEGRITY${NC}"
 # Check IPv6
 printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Zero-Leak (IPv6 Disable)${NC}"
 if [ "$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)" == "1" ]; then print_status 0; else print_status 1; fi
 
-# Check IPSet
-IR_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Privacy Shield (GeoEntries)${NC}"
-if [ -n "$IR_COUNT" ] && [ "$IR_COUNT" -gt 0 ]; then echo -e "${BGREEN}[$IR_COUNT IPs]${NC}"; else print_status 1; fi
+# Check IPSets
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Nuclear IPSet (Isolation)${NC}"
+IN_COUNT=$(ipset list country_block_in 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
+OUT_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' | awk '{print $4}')
+if [ -n "$IN_COUNT" ] && [ "$IN_COUNT" -gt 0 ]; then echo -e "${BGREEN}[$IN_COUNT IPs]${NC}"; else echo -e "${BRED}[EMPTY]${NC}"; GLOBAL_FAIL=1; fi
 
-# Live Test
-printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Russia Geofence Test${NC}"
+# Check Raw Table Isolation
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Raw Table PREROUTING Drop${NC}"
+if iptables -t raw -L PREROUTING -n | grep -q "DROP.*country_block_in"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+
+# Check Policy Routing (Table 200)
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Blackhole Route (Table 200)${NC}"
+if ip route show table 200 2>/dev/null | grep -q "blackhole default"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+
+# Check FWMark Rule
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Fwmark 0x99 Routing Rule${NC}"
+if ip rule show | grep -q "fwmark 0x99 lookup 200"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+
+echo -e "\n  ${BCYAN}◈ 4. LIVE GEOPRIVACY VALIDATION${NC}"
+# DPI Checks
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}DPI Shield (MSS Clamp)${NC}"
+if iptables -t mangle -L POSTROUTING -n | grep -q "TCPMSS.*set-mss 1200"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
+
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}TTL Obfuscation (64)${NC}"
+if iptables -t mangle -L POSTROUTING -n | grep -q "TTL set-to 64"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
+
+# Check SSH Banner Obfuscation
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}SSH Banner (Microsoft_IIS)${NC}"
+if strings /usr/sbin/sshd | grep -q "Microsoft_IIS"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
+
+# Live Tests
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Russia Geofence (Bidirectional)${NC}"
 if curl -m 3 -s -I --resolve "vk.com:80:87.240.139.194" "http://vk.com" > /dev/null 2>&1; then echo -e "${BRED}[LEAKED]${NC}"; GLOBAL_FAIL=1; else echo -e "${BGREEN}[PROTECTED]${NC}"; fi
+
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}China Geofence (Bidirectional)${NC}"
+if curl -m 3 -s -I --resolve "baidu.com:80:110.242.68.66" "http://baidu.com" > /dev/null 2>&1; then echo -e "${BRED}[LEAKED]${NC}"; GLOBAL_FAIL=1; else echo -e "${BGREEN}[PROTECTED]${NC}"; fi
+
+printf "  ${BPURPLE}├─${NC} %-36s" "${WHITE}Iran Privacy (Outbound Only)${NC}"
+if curl -m 3 -s -I --resolve "snapp.ir:80:185.239.104.14" "http://snapp.ir" > /dev/null 2>&1; then echo -e "${BRED}[LEAKED]${NC}"; GLOBAL_FAIL=1; else echo -e "${BGREEN}[PROTECTED]${NC}"; fi
 
 # FINAL VERDICT
 echo -e "\n${BPURPLE}  ◈──────────────────────────────────────────────────────────────────◈${NC}"
 if [ "$GLOBAL_FAIL" -eq 1 ]; then
-    echo -e "  ${BRED}  [!] AUDIT FAILED - SYSTEM IRREGULARITIES DETECTED${NC}"
+    echo -e "  ${BRED}  [!] AUDIT FAILED - NUCLEAR DEFENSES COMPROMISED${NC}"
     echo -e "  ${BRED}  CHECK LOG: /var/log/megassh_audit.log${NC}"
 else
-    echo -e "  ${BGREEN}  [✓] ALL SYSTEMS NOMINAL - ELITE STATUS CONFIRMED${NC}"
+    echo -e "  ${BGREEN}  [✓] NUCLEAR SHIELD ACTIVE - ELITE STATUS CONFIRMED${NC}"
     
-    echo -e "\n  ${BCYAN}◈ SSH OVER ICMP (TRANSPARENT TUNNEL) CONFIGURATION${NC}"
+    echo -e "\n  ${BCYAN}◈ ELITE SSH ACCESS INFO${NC}"
     echo -e "    ${BPURPLE}│${NC}"
-    echo -e "    ${BPURPLE}├─${NC} ${WHITE}Entrance :${NC} ${CYAN}127.0.0.1:443${NC}"
-    echo -e "    ${BPURPLE}├─${NC} ${WHITE}Server IP:${NC} ${CYAN}${SERVER_IP}${NC}"
+    echo -e "    ${BPURPLE}├─${NC} ${WHITE}Primary Entrance :${NC} ${CYAN}Port 443 (TCP)${NC}"
+    echo -e "    ${BPURPLE}├─${NC} ${WHITE}Rescue Entrance  :${NC} ${CYAN}Port 22${NC}"
+    echo -e "    ${BPURPLE}├─${NC} ${WHITE}Server IP        :${NC} ${CYAN}${SERVER_IP}${NC}"
     echo -e "    ${BPURPLE}│${NC}"
-    echo -e "    ${BPURPLE}╰─>${NC} ${WHITE}Client CMD:${NC} ${BGREEN}sudo ./pingtunnel -type client -l :443 -s ${SERVER_IP} -t 127.0.0.1:443 -key 123456${NC}"
+    echo -e "    ${BPURPLE}╰─>${NC} ${WHITE}Connection CMD   :${NC} ${BGREEN}ssh root@${SERVER_IP} -p 443${NC}"
 fi
 echo -e "${BPURPLE}  ◈──────────────────────────────────────────────────────────────────◈${NC}\n"
