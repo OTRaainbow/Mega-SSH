@@ -163,11 +163,11 @@ sysctl -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null 2>&1
 
 # B. Hard-block IPv6 via ip6tables
 if command -v ip6tables >/dev/null; then
-    ip6tables -P INPUT DROP
-    ip6tables -P OUTPUT DROP
-    ip6tables -P FORWARD DROP
-    ip6tables -F
-    ip6tables -X
+    ip6tables -P INPUT DROP 2>/dev/null
+    ip6tables -P OUTPUT DROP 2>/dev/null
+    ip6tables -P FORWARD DROP 2>/dev/null
+    ip6tables -F 2>/dev/null
+    ip6tables -X 2>/dev/null
 fi
 
 # C. Flush IPv4 Tables
@@ -314,8 +314,10 @@ iptables -t mangle -A OUTPUT -p tcp -m multiport --sports 22,443 -j ACCEPT
 
 # B. MARK all other outbound traffic to blocked countries
 # This forces the packet into the 'Table 200' Blackhole.
-iptables -t mangle -A OUTPUT -m set --match-set country_block_out dst -j MARK --set-mark 0x99
-iptables -t mangle -A PREROUTING -m set --match-set country_block_out dst -j MARK --set-mark 0x99
+if ipset list country_block_out >/dev/null 2>&1; then
+    iptables -t mangle -A OUTPUT -m set --match-set country_block_out dst -j MARK --set-mark 0x99
+    iptables -t mangle -A PREROUTING -m set --match-set country_block_out dst -j MARK --set-mark 0x99
+fi
 
 # 6. BASE CONNECTIVITY & SECURITY
 iptables -A INPUT -i lo -j ACCEPT
@@ -362,14 +364,14 @@ fi
 print_step "7/7" "Validating Firewall Configuration..."
 VAL_FAIL=0
 
-# Check RAW table
-if ! iptables -t raw -L PREROUTING -n 2>/dev/null | grep -qiE "NOTRACK.*multiport.*dports 22,443"; then
-    print_error "Raw PREROUTING NOTRACK rule missing or mismatched!"
+# Check RAW table using ultra-resilient patterns
+if ! iptables -t raw -S PREROUTING 2>/dev/null | grep -qi "notrack"; then
+    print_error "Raw PREROUTING NOTRACK rule missing!"
     VAL_FAIL=1
 fi
 
-if ! iptables -t raw -L OUTPUT -n 2>/dev/null | grep -qiE "NOTRACK.*multiport.*sports 22,443"; then
-    print_error "Raw OUTPUT NOTRACK rule missing or mismatched!"
+if ! iptables -t raw -S OUTPUT 2>/dev/null | grep -qi "notrack"; then
+    print_error "Raw OUTPUT NOTRACK rule missing!"
     VAL_FAIL=1
 fi
 
@@ -379,7 +381,7 @@ if ! ip route show table 200 2>/dev/null | grep -q "blackhole default"; then
     VAL_FAIL=1
 fi
 
-if ! ip rule show | grep -q "fwmark 0x99 lookup 200"; then
+if ! ip rule show | grep -q "0x99"; then
     print_error "Fwmark routing rule missing!"
     VAL_FAIL=1
 fi

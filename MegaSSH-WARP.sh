@@ -60,7 +60,23 @@ print_error() {
 }
 
 print_warn() {
-    echo -e "${BYELLOW}[ WARN ]${NC} $1"
+    echo -e "${BYELLOW} [ WARN ]${NC} $1"
+}
+
+# Wait for Apt Lock
+wait_for_apt_lock() {
+    print_info "Checking for background system updates (apt lock)..."
+    local count=0
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || fuser /var/lib/dpkg/lock >/dev/null 2>&1 || fuser /var/cache/apt/archives/lock >/dev/null 2>&1; do
+        ((count++))
+        if [ $count -eq 1 ]; then
+            print_warn "Apt is currently locked by another process. Waiting..."
+        fi
+        sleep 5
+    done
+    if [ $count -gt 0 ]; then
+        print_success "Apt lock released."
+    fi
 }
 
 # --- Execution ---
@@ -102,6 +118,7 @@ curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | gpg --yes --dearmor --o
 VERSION_CODENAME=$(lsb_release -cs)
 [ "$VERSION_CODENAME" == "" ] && VERSION_CODENAME="noble"
 echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $VERSION_CODENAME main" | tee /etc/apt/sources.list.d/cloudflare-client.list
+wait_for_apt_lock
 apt update && apt install -y cloudflare-warp
 
 # Ensure Service is Running

@@ -102,6 +102,22 @@ run_with_spinner() {
     printf "    \b\b\b\b"
 }
 
+# Wait for Apt Lock
+wait_for_apt_lock() {
+    print_info "Checking for background system updates (apt lock)..."
+    local count=0
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || fuser /var/lib/dpkg/lock >/dev/null 2>&1 || fuser /var/cache/apt/archives/lock >/dev/null 2>&1; do
+        ((count++))
+        if [ $count -eq 1 ]; then
+            print_warn "Apt is currently locked by another process. Waiting..."
+        fi
+        sleep 5
+    done
+    if [ $count -gt 0 ]; then
+        print_success "Apt lock released."
+    fi
+}
+
 # Health Check Function with Retries
 check_service_health() {
     local service=$1
@@ -131,7 +147,7 @@ fetch_script() {
         if [[ "$REPO_BASE" == *"ChangeMe"* ]]; then
             print_error "Error: REPO_BASE is not configured!"
             print_warn "1. Open MegaSSH.sh"
-            print_warn "2. Change 'ChangeMe/MegaSSH' to your GitHub User/Repo"
+            print_warn "2. Change 'OTRaainbow/Mega-SSH' to your own GitHub User/Repo if using a fork."
             print_warn "3. OR place '$script_name' in this directory manually."
             echo "Error: REPO_BASE unconfigured while fetching $script_name" >> $LOG_FILE
             exit 1
@@ -225,6 +241,7 @@ export DEBIAN_FRONTEND=noninteractive
 # Dependencies (Source Compile Prep)
 # Dependencies (Source Compile Prep)
 # Note: nginx removed from bulk install to use official mainline repo below
+wait_for_apt_lock
 (apt update && apt upgrade -y && apt install -y curl socat wget git cmake make gcc build-essential ipset iptables-persistent conntrack unzip tar cron libssl-dev libpcre2-dev zlib1g-dev liblua5.3-dev gnupg2 ca-certificates lsb-release ubuntu-keyring) >> $LOG_FILE 2>&1 &
 PID=$!
 run_with_spinner $PID
@@ -253,6 +270,7 @@ if ! command -v nginx > /dev/null || [[ $(nginx -v 2>&1 | grep -o "nginx/") == "
     echo -e "Package: *\nPin: origin nginx.org\nPin-Priority: 900\n" \
         | tee /etc/apt/preferences.d/99nginx
         
+    wait_for_apt_lock
     apt update >> $LOG_FILE 2>&1
     apt install -y nginx nginx-module-njs >> $LOG_FILE 2>&1
     
@@ -288,7 +306,19 @@ if ! command -v haproxy >/dev/null || [[ $(haproxy -v | awk '{print $3}') != "3.
     wget -q https://www.haproxy.org/download/3.3/src/haproxy-3.3.2.tar.gz
     tar xzf haproxy-3.3.2.tar.gz
     cd haproxy-3.3.2
-    make TARGET=linux-glibc USE_OPENSSL=1 USE_PCRE2=1 USE_ZLIB=1 USE_LUA=1 >> $LOG_FILE 2>&1
+    
+    # RAM-optimized compilation check
+    TOTAL_MEM=$(free -m | awk '/^Mem:/{print $2}')
+    CPU_CORES=$(nproc)
+    if [ "$TOTAL_MEM" -lt 1500 ]; then
+        print_warn "Low RAM detected (${TOTAL_MEM}MB). Using single-threaded compilation."
+        MAKE_JOBS=1
+    else
+        MAKE_JOBS=$((CPU_CORES > 4 ? 4 : CPU_CORES))
+        print_info "RAM detected: ${TOTAL_MEM}MB. Using $MAKE_JOBS parallel jobs."
+    fi
+    
+    make -j$MAKE_JOBS TARGET=linux-glibc USE_OPENSSL=1 USE_PCRE2=1 USE_ZLIB=1 USE_LUA=1 >> $LOG_FILE 2>&1
     make install >> $LOG_FILE 2>&1
     
     # Create Systemd Service

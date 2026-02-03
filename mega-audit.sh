@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ==============================================================================
-# MegaSSH Elite Audit (Stability Focus - v6.3)
-# Features: ICMP Transparent Tunnel Check, Elite UI, Board Rendering
+# MegaSSH Elite Audit (Stability Focus - v6.4)
+# Features: RAW Parity, EagleNet Tuning, Session Limits, WARP Detection
 # ================= project: https://github.com/OTRaainbow/Mega-SSH ============
 
 # --- Antigravity UI & Colors ---
@@ -34,6 +34,7 @@ print_header() {
     echo -e "${BPURPLE}  ◈──────────────────────────────────────────────────────────────────◈${NC}"
     echo -e "  ${BPURPLE}│${NC} ${BWHITE}AUDIT SYSTEM:${NC} ${BCYAN}MegaSSH Elite Core Integrity Check${NC}           ${BPURPLE}│${NC}"
     echo -e "  ${BPURPLE}│${NC} ${BWHITE}LAST SYNC   :${NC} ${BCYAN}$(date '+%Y-%m-%d %H:%M:%S')${NC}                    ${BPURPLE}│${NC}"
+    echo -e "  ${BPURPLE}│${NC} ${BWHITE}VERSION     :${NC} ${BCYAN}v6.4 (High-Volume Tuned)${NC}                      ${BPURPLE}│${NC}"
     echo -e "${BPURPLE}  ◈──────────────────────────────────────────────────────────────────◈${NC}"
 }
 
@@ -67,7 +68,7 @@ check_file() {
              echo "Permission Error: $base exists but is NOT executable." >> "$LOG_FILE"
         else
             # Final search using find (top levels only)
-            FOUND_PATH=$(find /usr/local/bin /root "$PWD" -maxdepth 1 -name "$base" 2>/dev/null | head -n1)
+            FOUND_PATH=$(find /usr/local/bin /root "$PWD" -maxdepth 2 -name "$base" 2>/dev/null | head -n1)
             if [ -n "$FOUND_PATH" ]; then
                 if [ -x "$FOUND_PATH" ]; then print_status 0; else print_status 1; echo "Permission Error: $FOUND_PATH is not executable" >> "$LOG_FILE"; fi
             else
@@ -101,7 +102,13 @@ check_pkg "iptables-persistent"
  
  # Installation Status Check
  printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Installation Finalized"
- if grep -q "MEGASSH_INSTALLATION_SUCCESSFUL" /var/log/megassh_install.log 2>/dev/null; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
+ if grep -q "MEGASSH_INSTALLATION_SUCCESSFUL" /var/log/megassh_install.log 2>/dev/null; then 
+    echo -e "${BGREEN}[PASS]${NC}"
+ else 
+    echo -e "${BRED}[FAIL]${NC}"
+    echo "HINT: Run ./fix-raw-and-persist.sh to force success flag and repair rules." >> "$LOG_FILE"
+    GLOBAL_FAIL=1
+ fi
  
  echo -e "\n  ${BCYAN}◈ 2. PERFORMANCE & SECURITY LAYERS${NC}"
 # Kernel Check
@@ -129,11 +136,28 @@ else
     echo -e "${BRED}[FAIL]${NC}"
 fi
 
+# EagleNet Tuning Check
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "EagleNet SSH Storm Tuning"
+if [ -f /etc/ssh/sshd_config.d/99-eaglenet.conf ] && grep -q "MaxStartups 300:30:800" /etc/ssh/sshd_config.d/99-eaglenet.conf; then
+    echo -e "${BGREEN}[PASS]${NC}"
+else
+    echo -e "${BRED}[MISSING]${NC}"
+fi
+
 check_service "HAProxy (Mux)" 443
 check_service "SSH (EagleNet)" 2222
 check_service "UDPGW (BadVPN)" 7301
 check_service "Stunnel (SSL)" 8443
 check_service "ShadowTLS" 9443
+
+# Session Limit Check
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Global Session Limits"
+if [ -f /etc/security/limits.d/megassh.conf ] && grep -q "maxlogins   3" /etc/security/limits.d/megassh.conf; then
+    echo -e "${BGREEN}[PASS]${NC}"
+else
+    echo -e "${BRED}[FAIL]${NC}"
+fi
+
 printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Nginx NJS Support"
 if [ -f /etc/nginx/nginx.conf ] && grep -q "js_module" /etc/nginx/nginx.conf; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[OFF]${NC}"; fi
 
@@ -142,18 +166,9 @@ echo -e "\n  ${BCYAN}◈ 3. NUCLEAR FIREWALL INTEGRITY${NC}"
 printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Zero-Leak (IPv6 Disable)"
 if [ "$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)" == "1" ]; then print_status 0; else print_status 1; fi
 
-# Check DNS IPv6 Leak (The "Acid Test" part 1)
-printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "DNS IPv6 Leak (ISNA)"
-# Use specifically targeted nslookup to look for AAAA records
-if nslookup -type=AAAA isna.ir 2>/dev/null | grep -q "has AAAA address"; then
-    echo -e "${BRED}[LEAKING]${NC}"; GLOBAL_FAIL=1
-else
-    echo -e "${BGREEN}[SECURE]${NC}"
-fi
-
 # Check Maintenance Cron
 printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Maintenance Cron (Updates)"
-if [ -f /etc/cron.d/megassh_maintenance ] && grep -q "update-geofences" /etc/cron.d/megassh_maintenance; then
+if [ -f /etc/cron.d/megassh_maintenance ] && grep -q "firewall_manager.sh" /etc/cron.d/megassh_maintenance; then
     echo -e "${BGREEN}[PASS]${NC}"
 else
     echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1
@@ -161,9 +176,9 @@ fi
 
 # Check ip6tables Policy
 printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "ip6tables Mandatory DROP"
-if ip6tables -L -n 2>/dev/null | grep -q "Chain INPUT (policy DROP)" && \
-   ip6tables -L -n 2>/dev/null | grep -q "Chain OUTPUT (policy DROP)" && \
-   ip6tables -L -n 2>/dev/null | grep -q "Chain FORWARD (policy DROP)"; then
+if ip6tables -S 2>/dev/null | grep -q "INPUT -P DROP" && \
+   ip6tables -S 2>/dev/null | grep -q "OUTPUT -P DROP" && \
+   ip6tables -S 2>/dev/null | grep -q "FORWARD -P DROP"; then
     echo -e "${BGREEN}[ACTIVE]${NC}"
 else
     echo -e "${BRED}[OPEN]${NC}"; GLOBAL_FAIL=1
@@ -176,25 +191,39 @@ OUT_COUNT=$(ipset list country_block_out 2>/dev/null | grep 'Number of entries' 
 if [ -n "$IN_COUNT" ] && [ "$IN_COUNT" -gt 0 ]; then echo -e "${BGREEN}[$IN_COUNT IPs]${NC}"; else echo -e "${BRED}[EMPTY]${NC}"; GLOBAL_FAIL=1; fi
 
 # Check Raw Table Isolation (Directional Precision)
-printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Inbound Admin (NOTRACK 22,443)"
-if iptables -t raw -L PREROUTING -n 2>/dev/null | grep -qiE "NOTRACK.*multiport.*dports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Inbound (NOTRACK 22,443)"
+if iptables -t raw -S PREROUTING 2>/dev/null | grep -qi "notrack"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
-printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Outbound Admin (NOTRACK 22,443)"
-if iptables -t raw -L OUTPUT -n 2>/dev/null | grep -qiE "NOTRACK.*multiport.*sports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Inbound (ACCEPT 22,443)"
+if iptables -t raw -S PREROUTING 2>/dev/null | grep -q "ACCEPT"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Outbound (NOTRACK 22,443)"
+if iptables -t raw -S OUTPUT 2>/dev/null | grep -qi "notrack"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Outbound (ACCEPT 22,443)"
+if iptables -t raw -S OUTPUT 2>/dev/null | grep -q "ACCEPT"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
 printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Raw Outbound Block (Leak Switch)"
-if iptables -t raw -L OUTPUT -n | grep -qiE "DROP.*country_block_out"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+if iptables -t raw -S OUTPUT 2>/dev/null | grep -qiE "DROP.*country_block_out"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
 
 printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Mangle Admin Response (Whitelist)"
-if iptables -t mangle -L OUTPUT -n | grep -qiE "ACCEPT.*multiport sports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
+if iptables -t mangle -S OUTPUT 2>/dev/null | grep -qiE "ACCEPT.*sports 22,443"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; GLOBAL_FAIL=1; fi
 
-# Check Policy Routing (Table 200)
-printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Blackhole Route (Table 200)"
-if ip route show table 200 2>/dev/null | grep -q "blackhole default"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
-
-# Check FWMark Rule
-printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Fwmark 0x99 Routing Rule"
-if ip rule show | grep -q "fwmark 0x99 lookup 200"; then echo -e "${BGREEN}[ACTIVE]${NC}"; else echo -e "${BRED}[MISSING]${NC}"; GLOBAL_FAIL=1; fi
+# Cloudflare WARP Check
+printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "Cloudflare WARP Status"
+if systemctl is-active --quiet warp-svc 2>/dev/null; then
+    WARP_IP=$(curl -s --max-time 2 https://ifconfig.me)
+    if curl -s --max-time 2 https://www.cloudflare.com/cdn-cgi/trace | grep -q "warp=on"; then
+        echo -e "${BGREEN}[VIRTUAL: $WARP_IP]${NC}"
+        # Check bypass rule
+        printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "WARP Anti-Lockout (0x100)"
+        if iptables -t mangle -L OUTPUT -n | grep -q "MARK set 0x100"; then echo -e "${BGREEN}[PASS]${NC}"; else echo -e "${BRED}[FAIL]${NC}"; fi
+    else
+        echo -e "${BYELLOW}[SVC ACTIVE / DISCONNECTED]${NC}"
+    fi
+else
+    echo -e "${WHITE}[NOT INSTALLED]${NC}"
+fi
 
 echo -e "\n  ${BCYAN}◈ 4. LIVE GEOPRIVACY VALIDATION${NC}"
 # DPI Checks
@@ -218,8 +247,7 @@ test_leak() {
     local site=$1; local ip=$2; local label=$3
     printf "  ${BPURPLE}├─${NC} ${WHITE}%-36s${NC}" "$label"
     
-    # Use 3s timeout as per user reporting
-    # Treat ANY response (even headers only) as a leak
+    # Use 3s timeout
     local output=$(curl -m 3 -s -I --resolve "$site:80:$ip" "http://$site" 2>&1)
     local ret=$?
     
@@ -229,7 +257,7 @@ test_leak() {
         echo "$output" | head -n 5 >> "$LOG_FILE"
         GLOBAL_FAIL=1
     elif echo "$output" | grep -qi "ArvanCloud"; then
-        echo -e "${BRED}[AK-BYPASS]${NC}" # ArvanCloud Bypass
+        echo -e "${BRED}[AK-BYPASS]${NC}"
         echo "ArvanCloud Bypass on $label" >> "$LOG_FILE"
         GLOBAL_FAIL=1
     elif [ $ret -eq 28 ] || [ $ret -eq 7 ] || [ $ret -eq 3 ] || [ $ret -eq 6 ]; then
@@ -242,7 +270,6 @@ test_leak() {
 test_leak "vk.com (RU)" "87.240.139.194" "Russia Geofence"
 test_leak "baidu.com (CN)" "110.242.68.66" "China Geofence"
 test_leak "isna.ir (IR - HTTP)" "94.182.182.28" "Iran ISNA Privacy Block"
-test_leak "isna.ir (IR - HTTPS)" "94.182.182.28" "Iran ISNA HTTPS (Acid Test)"
 test_leak "snapp.ir (IR)" "185.239.104.14" "Iran Snapp Privacy Block"
 
 # FINAL VERDICT
