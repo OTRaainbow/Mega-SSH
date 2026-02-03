@@ -103,15 +103,15 @@ print_step "2.1" "Aggregating Geofence Data..."
 # Block RU and CN (Both Inbound and Outbound)
 RULES_DIR="/etc/megassh/rules"
 for cc in ru cn; do
-    FILE="ip2location_country_${cc}.netset"
-    [ ! -f "$FILE" ] && FILE="${RULES_DIR}/${cc}.netset"
+    FILE="${RULES_DIR}/${cc}.netset"
+    [ ! -f "$FILE" ] && FILE="ip2location_country_${cc}.netset"
     load_to_tmp "$cc" "$FILE" "tmp_block_in"
     load_to_tmp "$cc" "$FILE" "tmp_block_out"
 done
 
 # Block Iran (IR) - OUTBOUND ONLY
-FILE_IR="ip2location_country_ir.netset"
-[ ! -f "$FILE_IR" ] && FILE_IR="${RULES_DIR}/ir.netset"
+FILE_IR="${RULES_DIR}/ir.netset"
+[ ! -f "$FILE_IR" ] && FILE_IR="ip2location_country_ir.netset"
 load_to_tmp "ir" "$FILE_IR" "tmp_block_out"
 
 # Atomic Swap

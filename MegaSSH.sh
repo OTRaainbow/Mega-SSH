@@ -585,8 +585,13 @@ download_user_list "ru"
 download_user_list "cn"
 
 # --- Hardened Geofence Integration (Nuclear Isolation) ---
-print_step "8.1" "Deploying Nuclear Firewall & Total Geofence Isolation..."
-# Fetching the scripts to /root for persistent access
+# Fetching the scripts
+fetch_script "firewall_manager.sh"
+fetch_script "mega-audit.sh"
+
+# Move to /usr/local/bin for persistent access and standardized execution
+mv firewall_manager.sh /usr/local/bin/firewall_manager.sh
+mv mega-audit.sh /usr/local/bin/mega-audit.sh
 chmod +x /usr/local/bin/firewall_manager.sh /usr/local/bin/mega-audit.sh
 
 # AUTOMATIC EXECUTION: No manual intervention required anymore
@@ -594,10 +599,10 @@ print_info "Executing Nuclear Firewall..."
 bash /usr/local/bin/firewall_manager.sh
 
 # Sync netset files to the hardened rules directory
-cp /root/*.netset "$RULES_DIR/" 2>/dev/null
-mv /root/ip2location_country_cn.netset "$RULES_DIR/cn.netset" 2>/dev/null
-mv /root/ip2location_country_ru.netset "$RULES_DIR/ru.netset" 2>/dev/null
-mv /root/ip2location_country_ir.netset "$RULES_DIR/ir.netset" 2>/dev/null
+find . -maxdepth 1 -name "*.netset" -exec cp {} "$RULES_DIR/" \;
+[ -f "$RULES_DIR/ip2location_country_cn.netset" ] && mv "$RULES_DIR/ip2location_country_cn.netset" "$RULES_DIR/cn.netset"
+[ -f "$RULES_DIR/ip2location_country_ru.netset" ] && mv "$RULES_DIR/ip2location_country_ru.netset" "$RULES_DIR/ru.netset"
+[ -f "$RULES_DIR/ip2location_country_ir.netset" ] && mv "$RULES_DIR/ip2location_country_ir.netset" "$RULES_DIR/ir.netset"
 
 # Note: strict_block.sh is no longer needed separately as it is consolidated into firewall_manager.sh
 
